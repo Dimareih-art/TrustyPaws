@@ -65,6 +65,9 @@ const PASSIVE_TIMESTAMP_KEY =
 const LANGUAGE_STORAGE_KEY =
   "trusty_language";
 
+const assetUrl = (path: string) =>
+  `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
+
 /* =====================================================
    TRANSLATIONS
 ===================================================== */
@@ -1104,7 +1107,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 1,
     passiveBonus: 0,
     sceneImage:
-      "/scene/box.png",
+      assetUrl("scene/box.png"),
     itemType: "box",
   },
 
@@ -1118,7 +1121,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 1,
     passiveBonus: 0,
     sceneImage:
-      "/scene/blanket.png",
+      assetUrl("scene/blanket.png"),
     itemType: "blanket",
   },
 
@@ -1132,7 +1135,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 2,
     passiveBonus: 0,
     sceneImage:
-      "/scene/blanket-2.png",
+      assetUrl("scene/blanket-2.png"),
     itemType: "blanket",
   },
 
@@ -1146,7 +1149,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 3,
     passiveBonus: 0,
     sceneImage:
-      "/scene/blanket-3.png",
+      assetUrl("scene/blanket-3.png"),
     itemType: "blanket",
   },
 
@@ -1160,7 +1163,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 5,
     passiveBonus: 0,
     sceneImage:
-      "/scene/blanket-4.png",
+      assetUrl("scene/blanket-4.png"),
     itemType: "blanket",
   },
 
@@ -1174,7 +1177,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 2,
     passiveBonus: 0,
     sceneImage:
-      "/scene/bowl.png",
+      assetUrl("scene/bowl.png"),
     itemType: "bowl",
   },
 
@@ -1188,7 +1191,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 3,
     passiveBonus: 0,
     sceneImage:
-      "/scene/bowl-2.png",
+      assetUrl("scene/bowl-2.png"),
     itemType: "bowl",
   },
 
@@ -1202,7 +1205,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 5,
     passiveBonus: 0,
     sceneImage:
-      "/scene/bowl-3.png",
+      assetUrl("scene/bowl-3.png"),
     itemType: "bowl",
   },
 
@@ -1216,7 +1219,7 @@ const ITEMS: Upgrade[] = [
     tapBonus: 7,
     passiveBonus: 0,
     sceneImage:
-      "/scene/bowl-4.png",
+      assetUrl("scene/bowl-4.png"),
     itemType: "bowl",
   },
 ];
@@ -1232,7 +1235,7 @@ const HOUSES: Upgrade[] = [
     tapBonus: 3,
     passiveBonus: 2,
     sceneImage:
-      "/scene/house-1.png",
+      assetUrl("scene/house-1.png"),
   },
 
   {
@@ -1245,7 +1248,7 @@ const HOUSES: Upgrade[] = [
     tapBonus: 5,
     passiveBonus: 4,
     sceneImage:
-      "/scene/house-2.png",
+      assetUrl("scene/house-2.png"),
   },
 
   {
@@ -1258,7 +1261,7 @@ const HOUSES: Upgrade[] = [
     tapBonus: 8,
     passiveBonus: 8,
     sceneImage:
-      "/scene/house-3.png",
+      assetUrl("scene/house-3.png"),
   },
 
   {
@@ -1271,7 +1274,7 @@ const HOUSES: Upgrade[] = [
     tapBonus: 12,
     passiveBonus: 12,
     sceneImage:
-      "/scene/house-4.png",
+      assetUrl("scene/house-4.png"),
   },
 
   {
@@ -1284,7 +1287,7 @@ const HOUSES: Upgrade[] = [
     tapBonus: 18,
     passiveBonus: 18,
     sceneImage:
-      "/scene/house-5.png",
+      assetUrl("scene/house-5.png"),
   },
 
   {
@@ -1297,7 +1300,7 @@ const HOUSES: Upgrade[] = [
     tapBonus: 30,
     passiveBonus: 25,
     sceneImage:
-      "/scene/villa.png",
+      assetUrl("scene/villa.png"),
   },
 ];
 
@@ -1308,7 +1311,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Та самая стартовая локация.",
     image:
-      "/background/background-0.png",
+      assetUrl("background/background-0.png"),
     cost: 0,
   },
 
@@ -1318,7 +1321,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Более приятные условия для питомца.",
     image:
-      "/background/background-1.png",
+      assetUrl("background/background-1.png"),
     cost: 100000,
   },
 
@@ -1328,7 +1331,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Светлая атмосфера для котика.",
     image:
-      "/background/background-2.png",
+      assetUrl("background/background-2.png"),
     cost: 200000,
   },
 
@@ -1338,7 +1341,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Тихий сад, где котик может отдыхать.",
     image:
-      "/background/background-3.png",
+      assetUrl("background/background-3.png"),
     cost: 350000,
   },
 
@@ -1348,7 +1351,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Спокойная атмосфера под звёздным небом.",
     image:
-      "/background/background-4.png",
+      assetUrl("background/background-4.png"),
     cost: 500000,
   },
 
@@ -1358,7 +1361,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Тёплая осенняя локация.",
     image:
-      "/background/background-5.png",
+      assetUrl("background/background-5.png"),
     cost: 700000,
   },
 
@@ -1368,7 +1371,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Снежная локация для тёплого дома.",
     image:
-      "/background/background-6.png",
+      assetUrl("background/background-6.png"),
     cost: 900000,
   },
 
@@ -1378,7 +1381,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Особенная локация для счастливого питомца.",
     image:
-      "/background/background-7.png",
+      assetUrl("background/background-7.png"),
     cost: 1200000,
   },
 
@@ -1388,7 +1391,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Просторная зелёная территория.",
     image:
-      "/background/background-8.png",
+      assetUrl("background/background-8.png"),
     cost: 1500000,
   },
 
@@ -1398,7 +1401,7 @@ const BACKGROUNDS: Background[] = [
     description:
       "Редкая финальная атмосфера.",
     image:
-      "/background/background-9.png",
+      assetUrl("background/background-9.png"),
     cost: 2000000,
   },
 ];
@@ -3328,7 +3331,7 @@ function IntroScreen({
           <div className="intro-cat-glow" />
 
           <img
-            src="/cat-3d.png"
+            src={assetUrl("cat-3d.png")}
             alt="Pet"
             className="intro-cat"
             draggable="false"
@@ -3615,7 +3618,7 @@ function HomeScreen({
         >
 
           <img
-            src={`/background/${selectedBackground}.png`}
+            src={assetUrl(`background/${selectedBackground}.png`)}
             className="scene-background-image"
             alt=""
             draggable="false"
@@ -3631,7 +3634,7 @@ function HomeScreen({
                   "true";
 
                 image.src =
-                  "/background/background-0.png";
+                  assetUrl("background/background-0.png");
               }
             }}
           />
@@ -3669,7 +3672,7 @@ function HomeScreen({
           {hasBox &&
             !highestHouse && (
             <img
-              src="/scene/box.png"
+              src={assetUrl("scene/box.png")}
               className="scene-object scene-box"
               alt=""
               draggable="false"
@@ -3721,7 +3724,7 @@ function HomeScreen({
           >
 
             <img
-              src="/cat-3d.png"
+              src={assetUrl("cat-3d.png")}
               alt={petName}
               className="cat-image"
               draggable="false"
