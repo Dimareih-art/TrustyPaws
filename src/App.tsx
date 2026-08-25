@@ -1484,6 +1484,8 @@ function calculateOfflineEnergy(
 function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [supabaseReady, setSupabaseReady] = useState(false);
+  const [supabaseError, setSupabaseError] = useState("");
+  const [supabaseAttempt, setSupabaseAttempt] = useState(0);
   const [activeTab, setActiveTab] =
     useState<Tab>("home");
 
@@ -1685,6 +1687,11 @@ function App() {
 
     const initSupabaseUser = async () => {
       try {
+        if (!cancelled) {
+          setSupabaseReady(false);
+          setSupabaseError("");
+        }
+
         console.log("TrustyPaws: connecting to Supabase...");
 
         const {
@@ -1716,6 +1723,7 @@ function App() {
             );
 
             if (!cancelled) {
+              setSupabaseError(error.message || "Anonymous login failed");
               setSupabaseReady(true);
             }
 
@@ -1731,6 +1739,7 @@ function App() {
           );
 
           if (!cancelled) {
+            setSupabaseError("Supabase returned no user");
             setSupabaseReady(true);
           }
 
@@ -1741,6 +1750,7 @@ function App() {
 
         if (!cancelled) {
           setUserId(user.id);
+          setSupabaseError("");
           setSupabaseReady(true);
         }
 
@@ -1755,6 +1765,12 @@ function App() {
         );
 
         if (!cancelled) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unknown Supabase initialization error";
+
+          setSupabaseError(message);
           setSupabaseReady(true);
         }
       }
@@ -1765,7 +1781,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [supabaseAttempt]);
 
   /* ===================================================
      UPGRADES
@@ -3125,6 +3141,10 @@ function App() {
               language={language}
               userId={userId}
               supabaseReady={supabaseReady}
+              supabaseError={supabaseError}
+              onRetrySupabase={() =>
+                setSupabaseAttempt((value) => value + 1)
+              }
               formatNumber={formatNumber}
             />
           )}
@@ -5086,12 +5106,16 @@ function FriendsScreen({
   language,
   userId,
   supabaseReady,
+  supabaseError,
+  onRetrySupabase,
   formatNumber,
 }: {
   t: Translation;
   language: Language;
   userId: string | null;
   supabaseReady: boolean;
+  supabaseError: string;
+  onRetrySupabase: () => void;
   formatNumber: (value: number) => string;
 }) {
   const ft = FRIEND_TEXT[language];
@@ -5451,7 +5475,7 @@ function FriendsScreen({
     }
   };
 
-  if (!supabaseReady || !userId) {
+  if (!supabaseReady) {
     return (
       <div className="page">
         <PageHeader
@@ -5463,6 +5487,50 @@ function FriendsScreen({
         <section className="friends-loading-card">
           <div className="friends-loading-paw">🐾</div>
           <strong>{ft.connection}</strong>
+        </section>
+      </div>
+    );
+  }
+
+  if (!userId) {
+    return (
+      <div className="page">
+        <PageHeader
+          eyebrow={t.community}
+          title={t.friendsTitle}
+          subtitle={ft.subtitle}
+        />
+
+        <section className="friends-loading-card">
+          <div className="friends-loading-paw">⚠️</div>
+          <strong>
+            {language === "en"
+              ? "Could not connect to the server"
+              : language === "ua"
+              ? "Не вдалося підключитися до сервера"
+              : "Не удалось подключиться к серверу"}
+          </strong>
+
+          <p style={{ margin: "8px 0 12px", opacity: 0.7, fontSize: "12px" }}>
+            {supabaseError ||
+              (language === "en"
+                ? "Supabase authorization failed."
+                : language === "ua"
+                ? "Не вдалося авторизуватися в Supabase."
+                : "Не удалось авторизоваться в Supabase.")}
+          </p>
+
+          <button
+            type="button"
+            className="primary-button"
+            onClick={onRetrySupabase}
+          >
+            {language === "en"
+              ? "Try again"
+              : language === "ua"
+              ? "Спробувати ще раз"
+              : "Повторить"}
+          </button>
         </section>
       </div>
     );
