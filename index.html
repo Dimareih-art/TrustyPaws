@@ -1,13 +1,69 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>trustypaws</title>
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+
+    <meta name="theme-color" content="#0b1017" />
+
+    <meta
+      name="mobile-web-app-capable"
+      content="yes"
+    />
+
+    <meta
+      name="apple-mobile-web-app-capable"
+      content="yes"
+    />
+
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon.svg"
+    />
+
+    <title>TrustyPaws</title>
+
+    <!-- Telegram Mini Apps SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
+
   <body>
     <div id="root"></div>
+
     <script type="module" src="/src/main.tsx"></script>
+
+    <script>
+      try {
+        if (window.Telegram?.WebApp) {
+          const tg = window.Telegram.WebApp;
+
+          tg.ready();
+          tg.expand();
+
+          if (typeof tg.disableVerticalSwipes === "function") {
+            tg.disableVerticalSwipes();
+          }
+
+          console.log("TrustyPaws: Telegram WebApp initialized");
+          console.log("Telegram version:", tg.version);
+          console.log("Telegram platform:", tg.platform);
+        }
+      } catch (error) {
+        console.error(
+          "TrustyPaws: Telegram initialization error:",
+          error
+        );
+      }
+    </script>
   </body>
 </html>
