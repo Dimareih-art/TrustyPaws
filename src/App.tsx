@@ -1,0 +1,6092 @@
+import { useEffect, useMemo, useState } from "react";
+import "./index.css";
+import { supabase } from "./lib/supabase";
+
+type Tab =
+  | "home"
+  | "upgrades"
+  | "tasks"
+  | "friends"
+  | "shop";
+
+type UpgradeSection =
+  | "items"
+  | "houses"
+  | "backgrounds";
+
+type Language = "ru" | "en" | "ua";
+
+type Upgrade = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  cost: number;
+  tapBonus: number;
+  passiveBonus: number;
+  sceneImage?: string;
+  itemType?: "box" | "blanket" | "bowl";
+};
+
+type Background = {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  cost: number;
+};
+
+/* =====================================================
+   CONSTANTS
+===================================================== */
+
+const MAX_ENERGY = 100;
+const ENERGY_REGEN_MS = 2000;
+
+const BASE_TAP_REWARD = 2;
+const BASE_PASSIVE_PER_MINUTE = 0;
+
+const ONLINE_GOAL = 10 * 60;
+const PET_GOAL = 200;
+
+const DAILY_REWARD = 50;
+const ONLINE_REWARD = 100;
+const PET_REWARD = 150;
+
+const ENERGY_STORAGE_KEY =
+  "trusty_energy";
+
+const ENERGY_TIMESTAMP_KEY =
+  "trusty_energy_timestamp";
+
+const PASSIVE_TIMESTAMP_KEY =
+  "trusty_last_passive";
+
+const LANGUAGE_STORAGE_KEY =
+  "trusty_language";
+
+/* =====================================================
+   TRANSLATIONS
+===================================================== */
+
+const translations = {
+  ru: {
+    settings: "Настройки",
+    resetProgress: "Сбросить прогресс",
+    restartGame: "Начать игру заново",
+    language: "Язык",
+    cancel: "Отмена",
+    reset: "Сбросить",
+
+    resetTitle: "Сбросить прогресс?",
+    resetDescription:
+      "Весь прогресс игры, Комфорт, покупки и имя питомца будут удалены.",
+
+    home: "Главная",
+    upgrades: "Прокачка",
+    tasks: "Задания",
+    friends: "Друзья",
+    shop: "Магазин",
+
+    petComfort: "КОМФОРТ ПИТОМЦА",
+    comfort: "КОМФОРТ",
+    perTap: "ЗА ТАП",
+    yourPet: "ТВОЙ ПИТОМЕЦ",
+
+    cold:
+      "Ему всё ещё холодно...",
+    warmer:
+      "Ему становится теплее.",
+    feelsHome:
+      "Он чувствует себя дома ❤️",
+
+    catFeelsGood: "Котику хорошо",
+    gettingCozy:
+      "Становится уютнее",
+
+    tapCat:
+      "🐾 Нажми на котика",
+    waitEnergy:
+      "⚡ Подожди восстановления энергии",
+
+    energy: "Энергия",
+    everyTwoSeconds:
+      "+1 каждые 2 сек",
+    fullyRestored:
+      "Полностью восстановлена",
+
+    taps: "Тапов",
+    perTapLabel: "За тап",
+
+    passiveComfort:
+      "ПАССИВНЫЙ КОМФОРТ",
+    passiveWorks: "работает",
+    passiveInactive: "не активен",
+    passiveDescription:
+      "Котик приносит Комфорт, даже когда ты не нажимаешь",
+    passiveLocked:
+      "Пассивный доход откроется после покупки домика",
+
+    development:
+      "РАЗВИТИЕ ПИТОМЦА",
+    upgradesTitle:
+      "Прокачка",
+    upgradesSubtitle:
+      "Создавай для котика настоящий комфорт",
+
+    income: "ДОХОД",
+    passivePerMinute:
+      "Комфорта / мин",
+    passiveAfterHouse:
+      "Пассивный доход откроется после покупки дома",
+
+    items: "Предметы",
+    houses: "Дома",
+    backgrounds: "Атмосфера",
+
+    itemsUpper: "ПРЕДМЕТЫ",
+    housesUpper: "ДОМА",
+    atmosphereUpper:
+      "АТМОСФЕРА ЛОКАЦИИ",
+
+    scene: "В СЦЕНЕ",
+    owned: "Куплено",
+    selected: "✓ Выбран",
+    using: "Используется",
+    choose: "Выбрать",
+    free: "Бесплатно",
+
+    backgroundNote:
+      "💡 Важно: новые изображения достаточно положить в папку public/background/.",
+
+    rewards: "НАГРАДЫ",
+    tasksSubtitle:
+      "Выполняй задания и забирай Комфорт",
+
+    dailyBonus:
+      "ЕЖЕДНЕВНЫЙ БОНУС",
+    everyDay:
+      "Заходи каждый день",
+    dailyDescription:
+      "Забери бесплатную награду за вход.",
+    claim:
+      "Забрать",
+    received:
+      "✓ Получено",
+
+    activeTasks:
+      "АКТИВНЫЕ ЗАДАНИЯ",
+
+    onlineTask:
+      "Проведи время в игре",
+    onlineDescription:
+      "Оставайся в игре 10 минут",
+
+    petTask:
+      "Погладь котика 200 раз",
+    petDescription:
+      "Покажи своему котику немного любви",
+
+    taskCompleted:
+      "✓ Выполнено",
+    taskInProgress:
+      "В процессе",
+
+    nextTask:
+      "🐾 Следующее задание доступно через",
+
+    community:
+      "СООБЩЕСТВО",
+    friendsTitle:
+      "Друзья",
+    friendsSubtitle:
+      "Скоро здесь появится настоящая система друзей",
+
+    friendsSystem:
+      "СИСТЕМА ДРУЗЕЙ",
+    friendsHere:
+      "Здесь будут твои друзья",
+    friendsDescription:
+      "Когда появится настоящая социальная система, здесь будут реальные игроки.",
+    soon:
+      "Скоро",
+
+    trustyPaws:
+      "TRUSTYPAWS",
+    shopTitle:
+      "Магазин",
+    shopSubtitle:
+      "Предметы, аксессуары и косметика для питомца",
+
+    shopComing:
+      "Магазин уже в пути",
+    shopDescription:
+      "Здесь появятся новые скины, игрушки, украшения и специальные предметы для котика.",
+
+    introEyebrow:
+      "TRUSTYPAWS",
+    introTitle:
+      "Придумайте имя своего нового питомца",
+    introDescription:
+      "Он пока ещё совсем один. Ему холодно и страшно. Но теперь у него есть ты.",
+    petNamePlaceholder:
+      "Имя котика",
+    takePet:
+      "Забрать питомца",
+    introNote:
+      "🌧️ Сейчас он живёт в плохих условиях. Твоя задача — постепенно сделать его жизнь комфортнее.",
+
+    boxName:
+      "Коробка",
+    boxDescription:
+      "Сухое место, где котику можно спрятаться от дождя.",
+
+    blanket1:
+      "Плед 1",
+    blanket1Description:
+      "Тёплый плед помогает котику согреться.",
+
+    blanket2:
+      "Плед 2",
+    blanket2Description:
+      "Мягкий плед с другим дизайном.",
+
+    blanket3:
+      "Плед 3",
+    blanket3Description:
+      "Более уютный и красивый плед.",
+
+    blanket4:
+      "Плед 4",
+    blanket4Description:
+      "Премиальный плед для настоящего уюта.",
+
+    bowl1:
+      "Миска 1",
+    bowl1Description:
+      "Своя миска — ещё один шаг к нормальной жизни.",
+
+    bowl2:
+      "Миска 2",
+    bowl2Description:
+      "Удобная миска с более приятным дизайном.",
+
+    bowl3:
+      "Миска 3",
+    bowl3Description:
+      "Красивая миска для ухоженного питомца.",
+
+    bowl4:
+      "Миска 4",
+    bowl4Description:
+      "Премиальная миска для счастливого котика.",
+
+    house1:
+      "Дом 1",
+    house1Description:
+      "Первый настоящий домик для питомца.",
+
+    house2:
+      "Дом 2",
+    house2Description:
+      "Больше места, тепла и комфорта.",
+
+    house3:
+      "Дом 3",
+    house3Description:
+      "Большой уютный дом для счастливого котика.",
+
+    house4:
+      "Дом 4",
+    house4Description:
+      "Роскошное место для отдыха.",
+
+    house5:
+      "Дом 5",
+    house5Description:
+      "Почти настоящий кошачий дворец.",
+
+    villa:
+      "Роскошная вилла",
+    villaDescription:
+      "Лучший дом, который может получить котик.",
+
+    firstMeeting:
+      "Первая Встреча",
+    firstMeetingDescription:
+      "Та самая стартовая локация.",
+
+    warmEvening:
+      "Тёплый Вечер",
+    warmEveningDescription:
+      "Более приятные условия для питомца.",
+
+    sunnyYard:
+      "Солнечный Двор",
+    sunnyYardDescription:
+      "Светлая атмосфера для котика.",
+
+    greenGarden:
+      "Зелёный Сад",
+    greenGardenDescription:
+      "Тихий сад, где котик может отдыхать.",
+
+    nightYard:
+      "Ночной Двор",
+    nightYardDescription:
+      "Спокойная атмосфера под звёздным небом.",
+
+    autumnPark:
+      "Осенний Парк",
+    autumnParkDescription:
+      "Тёплая осенняя локация.",
+
+    winterCozy:
+      "Зимний Уют",
+    winterCozyDescription:
+      "Снежная локация для тёплого дома.",
+
+    premiumYard:
+      "Премиальный Двор",
+    premiumYardDescription:
+      "Особенная локация для счастливого питомца.",
+
+    bigGarden:
+      "Большой Сад",
+    bigGardenDescription:
+      "Просторная зелёная территория.",
+
+    catParadise:
+      "Кошачий Рай",
+    catParadiseDescription:
+      "Редкая финальная атмосфера.",
+
+    perTapText:
+      "за тап",
+
+    minuteText:
+      "/мин",
+
+    lvl:
+      "LVL",
+  },
+
+  en: {
+    settings: "Settings",
+    resetProgress: "Reset progress",
+    restartGame: "Start the game again",
+    language: "Language",
+    cancel: "Cancel",
+    reset: "Reset",
+
+    resetTitle: "Reset progress?",
+    resetDescription:
+      "All game progress, Comfort, purchases and pet name will be deleted.",
+
+    home: "Home",
+    upgrades: "Upgrades",
+    tasks: "Tasks",
+    friends: "Friends",
+    shop: "Shop",
+
+    petComfort: "PET COMFORT",
+    comfort: "COMFORT",
+    perTap: "PER TAP",
+    yourPet: "YOUR PET",
+
+    cold:
+      "He is still cold...",
+    warmer:
+      "He is getting warmer.",
+    feelsHome:
+      "He feels at home ❤️",
+
+    catFeelsGood:
+      "Kitty feels good",
+    gettingCozy:
+      "Getting cozier",
+
+    tapCat:
+      "🐾 Tap the kitty",
+    waitEnergy:
+      "⚡ Wait for energy to recover",
+
+    energy: "Energy",
+    everyTwoSeconds:
+      "+1 every 2 sec",
+    fullyRestored:
+      "Fully restored",
+
+    taps: "Taps",
+    perTapLabel: "Per tap",
+
+    passiveComfort:
+      "PASSIVE COMFORT",
+    passiveWorks: "working",
+    passiveInactive:
+      "inactive",
+    passiveDescription:
+      "Your kitty earns Comfort even when you are not tapping",
+    passiveLocked:
+      "Passive income unlocks after buying a house",
+
+    development:
+      "PET DEVELOPMENT",
+    upgradesTitle:
+      "Upgrades",
+    upgradesSubtitle:
+      "Create real comfort for your kitty",
+
+    income: "INCOME",
+    passivePerMinute:
+      "Comfort / min",
+    passiveAfterHouse:
+      "Passive income unlocks after buying a house",
+
+    items: "Items",
+    houses: "Houses",
+    backgrounds: "Atmosphere",
+
+    itemsUpper: "ITEMS",
+    housesUpper: "HOUSES",
+    atmosphereUpper:
+      "LOCATION ATMOSPHERE",
+
+    scene: "IN SCENE",
+    owned: "Owned",
+    selected: "✓ Selected",
+    using: "Using",
+    choose: "Choose",
+    free: "Free",
+
+    backgroundNote:
+      "💡 Important: simply put new images into public/background/.",
+
+    rewards: "REWARDS",
+    tasksSubtitle:
+      "Complete tasks and earn Comfort",
+
+    dailyBonus:
+      "DAILY BONUS",
+    everyDay:
+      "Come back every day",
+    dailyDescription:
+      "Claim a free login reward.",
+    claim:
+      "Claim",
+    received:
+      "✓ Received",
+
+    activeTasks:
+      "ACTIVE TASKS",
+
+    onlineTask:
+      "Spend time in the game",
+    onlineDescription:
+      "Stay in the game for 10 minutes",
+
+    petTask:
+      "Pet the kitty 200 times",
+    petDescription:
+      "Show your kitty some love",
+
+    taskCompleted:
+      "✓ Completed",
+    taskInProgress:
+      "In progress",
+
+    nextTask:
+      "🐾 Next task available in",
+
+    community:
+      "COMMUNITY",
+    friendsTitle:
+      "Friends",
+    friendsSubtitle:
+      "A real friends system will appear here soon",
+
+    friendsSystem:
+      "FRIENDS SYSTEM",
+    friendsHere:
+      "Your friends will be here",
+    friendsDescription:
+      "When the real social system is ready, real players will appear here.",
+    soon:
+      "Soon",
+
+    trustyPaws:
+      "TRUSTYPAWS",
+    shopTitle:
+      "Shop",
+    shopSubtitle:
+      "Items, accessories and cosmetics for your pet",
+
+    shopComing:
+      "The shop is coming",
+    shopDescription:
+      "New skins, toys, decorations and special items for your kitty will appear here.",
+
+    introEyebrow:
+      "TRUSTYPAWS",
+    introTitle:
+      "Choose a name for your new pet",
+    introDescription:
+      "He is still all alone. He is cold and scared. But now he has you.",
+    petNamePlaceholder:
+      "Kitty name",
+    takePet:
+      "Take the pet",
+    introNote:
+      "🌧️ Right now he lives in poor conditions. Your task is to gradually make his life more comfortable.",
+
+    boxName:
+      "Box",
+    boxDescription:
+      "A dry place where the kitty can hide from the rain.",
+
+    blanket1:
+      "Blanket 1",
+    blanket1Description:
+      "A warm blanket to help the kitty stay cozy.",
+
+    blanket2:
+      "Blanket 2",
+    blanket2Description:
+      "A soft blanket with a different design.",
+
+    blanket3:
+      "Blanket 3",
+    blanket3Description:
+      "A cozier and prettier blanket.",
+
+    blanket4:
+      "Blanket 4",
+    blanket4Description:
+      "A premium blanket for true comfort.",
+
+    bowl1:
+      "Bowl 1",
+    bowl1Description:
+      "A personal bowl — another step toward a better life.",
+
+    bowl2:
+      "Bowl 2",
+    bowl2Description:
+      "A comfortable bowl with a nicer design.",
+
+    bowl3:
+      "Bowl 3",
+    bowl3Description:
+      "A beautiful bowl for a well-cared-for pet.",
+
+    bowl4:
+      "Bowl 4",
+    bowl4Description:
+      "A premium bowl for a happy kitty.",
+
+    house1:
+      "House 1",
+    house1Description:
+      "The first real home for your pet.",
+
+    house2:
+      "House 2",
+    house2Description:
+      "More space, warmth and comfort.",
+
+    house3:
+      "House 3",
+    house3Description:
+      "A large cozy home for a happy kitty.",
+
+    house4:
+      "House 4",
+    house4Description:
+      "A luxurious place to relax.",
+
+    house5:
+      "House 5",
+    house5Description:
+      "Almost a real kitty palace.",
+
+    villa:
+      "Luxury Villa",
+    villaDescription:
+      "The best home your kitty can get.",
+
+    firstMeeting:
+      "First Meeting",
+    firstMeetingDescription:
+      "The original starting location.",
+
+    warmEvening:
+      "Warm Evening",
+    warmEveningDescription:
+      "A more pleasant environment for your pet.",
+
+    sunnyYard:
+      "Sunny Yard",
+    sunnyYardDescription:
+      "A bright atmosphere for your kitty.",
+
+    greenGarden:
+      "Green Garden",
+    greenGardenDescription:
+      "A quiet garden where the kitty can relax.",
+
+    nightYard:
+      "Night Yard",
+    nightYardDescription:
+      "A peaceful atmosphere under the stars.",
+
+    autumnPark:
+      "Autumn Park",
+    autumnParkDescription:
+      "A warm autumn location.",
+
+    winterCozy:
+      "Winter Cozy",
+    winterCozyDescription:
+      "A snowy location for a warm home.",
+
+    premiumYard:
+      "Premium Yard",
+    premiumYardDescription:
+      "A special location for a happy pet.",
+
+    bigGarden:
+      "Big Garden",
+    bigGardenDescription:
+      "A spacious green territory.",
+
+    catParadise:
+      "Cat Paradise",
+    catParadiseDescription:
+      "A rare final atmosphere.",
+
+    perTapText:
+      "per tap",
+
+    minuteText:
+      "/min",
+
+    lvl:
+      "LVL",
+  },
+
+  ua: {
+    settings: "Налаштування",
+    resetProgress:
+      "Скинути прогрес",
+    restartGame:
+      "Почати гру заново",
+    language: "Мова",
+    cancel: "Скасувати",
+    reset: "Скинути",
+
+    resetTitle:
+      "Скинути прогрес?",
+    resetDescription:
+      "Весь прогрес гри, Затишок, покупки та ім'я улюбленця будуть видалені.",
+
+    home: "Головна",
+    upgrades: "Покращення",
+    tasks: "Завдання",
+    friends: "Друзі",
+    shop: "Магазин",
+
+    petComfort:
+      "ЗАТИШОК УЛЮБЛЕНЦЯ",
+    comfort: "ЗАТИШОК",
+    perTap: "ЗА ТАП",
+    yourPet:
+      "ТВІЙ УЛЮБЛЕНЕЦЬ",
+
+    cold:
+      "Йому все ще холодно...",
+    warmer:
+      "Йому стає тепліше.",
+    feelsHome:
+      "Він почувається як вдома ❤️",
+
+    catFeelsGood:
+      "Котику добре",
+    gettingCozy:
+      "Стає затишніше",
+
+    tapCat:
+      "🐾 Натисни на котика",
+    waitEnergy:
+      "⚡ Зачекай відновлення енергії",
+
+    energy: "Енергія",
+    everyTwoSeconds:
+      "+1 кожні 2 сек",
+    fullyRestored:
+      "Повністю відновлена",
+
+    taps: "Тапів",
+    perTapLabel: "За тап",
+
+    passiveComfort:
+      "ПАСИВНИЙ ЗАТИШОК",
+    passiveWorks:
+      "працює",
+    passiveInactive:
+      "не активний",
+    passiveDescription:
+      "Котик приносить Затишок, навіть коли ти не натискаєш",
+    passiveLocked:
+      "Пасивний дохід відкриється після покупки будиночка",
+
+    development:
+      "РОЗВИТОК УЛЮБЛЕНЦЯ",
+    upgradesTitle:
+      "Покращення",
+    upgradesSubtitle:
+      "Створюй для котика справжній затишок",
+
+    income: "ДОХІД",
+    passivePerMinute:
+      "Затишку / хв",
+    passiveAfterHouse:
+      "Пасивний дохід відкриється після покупки будинку",
+
+    items: "Предмети",
+    houses: "Будинки",
+    backgrounds: "Атмосфера",
+
+    itemsUpper: "ПРЕДМЕТИ",
+    housesUpper:
+      "БУДИНКИ",
+    atmosphereUpper:
+      "АТМОСФЕРА ЛОКАЦІЇ",
+
+    scene: "У СЦЕНІ",
+    owned: "Придбано",
+    selected: "✓ Обрано",
+    using: "Використовується",
+    choose: "Обрати",
+    free: "Безкоштовно",
+
+    backgroundNote:
+      "💡 Важливо: нові зображення достатньо покласти в папку public/background/.",
+
+    rewards: "НАГОРОДИ",
+    tasksSubtitle:
+      "Виконуй завдання та отримуй Затишок",
+
+    dailyBonus:
+      "ЩОДЕННИЙ БОНУС",
+    everyDay:
+      "Заходь щодня",
+    dailyDescription:
+      "Забери безкоштовну нагороду за вхід.",
+    claim: "Забрати",
+    received:
+      "✓ Отримано",
+
+    activeTasks:
+      "АКТИВНІ ЗАВДАННЯ",
+
+    onlineTask:
+      "Проведи час у грі",
+    onlineDescription:
+      "Залишайся у грі 10 хвилин",
+
+    petTask:
+      "Погладь котика 200 разів",
+    petDescription:
+      "Покажи своєму котику трохи любові",
+
+    taskCompleted:
+      "✓ Виконано",
+    taskInProgress:
+      "У процесі",
+
+    nextTask:
+      "🐾 Наступне завдання доступне через",
+
+    community:
+      "СПІЛЬНОТА",
+    friendsTitle:
+      "Друзі",
+    friendsSubtitle:
+      "Справжня система друзів скоро з'явиться тут",
+
+    friendsSystem:
+      "СИСТЕМА ДРУЗІВ",
+    friendsHere:
+      "Тут будуть твої друзі",
+    friendsDescription:
+      "Коли з'явиться справжня соціальна система, тут будуть реальні гравці.",
+    soon: "Скоро",
+
+    trustyPaws:
+      "TRUSTYPAWS",
+    shopTitle:
+      "Магазин",
+    shopSubtitle:
+      "Предмети, аксесуари та косметика для улюбленця",
+
+    shopComing:
+      "Магазин вже в дорозі",
+    shopDescription:
+      "Тут з'являться нові скіни, іграшки, прикраси та спеціальні предмети для котика.",
+
+    introEyebrow:
+      "TRUSTYPAWS",
+    introTitle:
+      "Придумай ім'я своєму новому улюбленцю",
+    introDescription:
+      "Він поки що зовсім один. Йому холодно і страшно. Але тепер у нього є ти.",
+    petNamePlaceholder:
+      "Ім'я котика",
+    takePet:
+      "Забрати улюбленця",
+    introNote:
+      "🌧️ Зараз він живе у поганих умовах. Твоє завдання — поступово зробити його життя комфортнішим.",
+
+    boxName:
+      "Коробка",
+    boxDescription:
+      "Сухе місце, де котик може сховатися від дощу.",
+
+    blanket1:
+      "Плед 1",
+    blanket1Description:
+      "Теплий плед допоможе котику зігрітися.",
+
+    blanket2:
+      "Плед 2",
+    blanket2Description:
+      "М'який плед з іншим дизайном.",
+
+    blanket3:
+      "Плед 3",
+    blanket3Description:
+      "Більш затишний та красивий плед.",
+
+    blanket4:
+      "Плед 4",
+    blanket4Description:
+      "Преміальний плед для справжнього затишку.",
+
+    bowl1:
+      "Миска 1",
+    bowl1Description:
+      "Власна миска — ще один крок до нормального життя.",
+
+    bowl2:
+      "Миска 2",
+    bowl2Description:
+      "Зручна миска з приємнішим дизайном.",
+
+    bowl3:
+      "Миска 3",
+    bowl3Description:
+      "Красива миска для доглянутого улюбленця.",
+
+    bowl4:
+      "Миска 4",
+    bowl4Description:
+      "Преміальна миска для щасливого котика.",
+
+    house1:
+      "Будинок 1",
+    house1Description:
+      "Перший справжній будиночок для улюбленця.",
+
+    house2:
+      "Будинок 2",
+    house2Description:
+      "Більше місця, тепла та комфорту.",
+
+    house3:
+      "Будинок 3",
+    house3Description:
+      "Великий затишний будинок для щасливого котика.",
+
+    house4:
+      "Будинок 4",
+    house4Description:
+      "Розкішне місце для відпочинку.",
+
+    house5:
+      "Будинок 5",
+    house5Description:
+      "Майже справжній котячий палац.",
+
+    villa:
+      "Розкішна вілла",
+    villaDescription:
+      "Найкращий будинок, який може отримати котик.",
+
+    firstMeeting:
+      "Перша зустріч",
+    firstMeetingDescription:
+      "Та сама стартова локація.",
+
+    warmEvening:
+      "Теплий вечір",
+    warmEveningDescription:
+      "Приємніші умови для улюбленця.",
+
+    sunnyYard:
+      "Сонячний двір",
+    sunnyYardDescription:
+      "Світла атмосфера для котика.",
+
+    greenGarden:
+      "Зелений сад",
+    greenGardenDescription:
+      "Тихий сад, де котик може відпочивати.",
+
+    nightYard:
+      "Нічний двір",
+    nightYardDescription:
+      "Спокійна атмосфера під зоряним небом.",
+
+    autumnPark:
+      "Осінній парк",
+    autumnParkDescription:
+      "Тепла осіння локація.",
+
+    winterCozy:
+      "Зимовий затишок",
+    winterCozyDescription:
+      "Снігова локація для теплого будинку.",
+
+    premiumYard:
+      "Преміальний двір",
+    premiumYardDescription:
+      "Особлива локація для щасливого улюбленця.",
+
+    bigGarden:
+      "Великий сад",
+    bigGardenDescription:
+      "Простора зелена територія.",
+
+    catParadise:
+      "Котячий рай",
+    catParadiseDescription:
+      "Рідкісна фінальна атмосфера.",
+
+    perTapText:
+      "за тап",
+
+    minuteText:
+      "/хв",
+
+    lvl:
+      "РІВ",
+  },
+} as const;
+
+type Translation = (typeof translations)[Language];
+
+/* =====================================================
+   STORAGE HELPERS
+===================================================== */
+
+function getStoredNumber(
+  key: string,
+  fallback: number
+): number {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const value =
+      localStorage.getItem(key);
+
+    if (value === null) {
+      return fallback;
+    }
+
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStoredString(
+  key: string,
+  fallback: string
+): string {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const value =
+      localStorage.getItem(key);
+
+    return value === null
+      ? fallback
+      : value;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStoredBoolean(
+  key: string,
+  fallback: boolean
+): boolean {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const value =
+      localStorage.getItem(key);
+
+    if (value === null) {
+      return fallback;
+    }
+
+    return value === "true";
+  } catch {
+    return fallback;
+  }
+}
+
+function getStoredArray(
+  key: string
+): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const value =
+      localStorage.getItem(key);
+
+    if (!value) {
+      return [];
+    }
+
+    const parsed =
+      JSON.parse(value);
+
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (
+            item
+          ): item is string =>
+            typeof item ===
+            "string"
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/* =====================================================
+   DATA
+===================================================== */
+
+const ITEMS: Upgrade[] = [
+  {
+    id: "box",
+    name: "Коробка",
+    icon: "📦",
+    description:
+      "Сухое место, где котику можно спрятаться от дождя.",
+    cost: 50,
+    tapBonus: 1,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/box.png",
+    itemType: "box",
+  },
+
+  {
+    id: "blanket",
+    name: "Плед 1",
+    icon: "🧶",
+    description:
+      "Тёплый плед помогает котику согреться.",
+    cost: 100,
+    tapBonus: 1,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/blanket.png",
+    itemType: "blanket",
+  },
+
+  {
+    id: "blanket2",
+    name: "Плед 2",
+    icon: "🧶",
+    description:
+      "Мягкий плед с другим дизайном.",
+    cost: 350,
+    tapBonus: 2,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/blanket-2.png",
+    itemType: "blanket",
+  },
+
+  {
+    id: "blanket3",
+    name: "Плед 3",
+    icon: "🧶",
+    description:
+      "Более уютный и красивый плед.",
+    cost: 1000,
+    tapBonus: 3,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/blanket-3.png",
+    itemType: "blanket",
+  },
+
+  {
+    id: "blanket4",
+    name: "Плед 4",
+    icon: "🧶",
+    description:
+      "Премиальный плед для настоящего уюта.",
+    cost: 3000,
+    tapBonus: 5,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/blanket-4.png",
+    itemType: "blanket",
+  },
+
+  {
+    id: "bowl",
+    name: "Миска 1",
+    icon: "🥣",
+    description:
+      "Своя миска — ещё один шаг к нормальной жизни.",
+    cost: 250,
+    tapBonus: 2,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/bowl.png",
+    itemType: "bowl",
+  },
+
+  {
+    id: "bowl2",
+    name: "Миска 2",
+    icon: "🥣",
+    description:
+      "Удобная миска с более приятным дизайном.",
+    cost: 750,
+    tapBonus: 3,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/bowl-2.png",
+    itemType: "bowl",
+  },
+
+  {
+    id: "bowl3",
+    name: "Миска 3",
+    icon: "🥣",
+    description:
+      "Красивая миска для ухоженного питомца.",
+    cost: 2000,
+    tapBonus: 5,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/bowl-3.png",
+    itemType: "bowl",
+  },
+
+  {
+    id: "bowl4",
+    name: "Миска 4",
+    icon: "🥣",
+    description:
+      "Премиальная миска для счастливого котика.",
+    cost: 5000,
+    tapBonus: 7,
+    passiveBonus: 0,
+    sceneImage:
+      "/scene/bowl-4.png",
+    itemType: "bowl",
+  },
+];
+
+const HOUSES: Upgrade[] = [
+  {
+    id: "house1",
+    name: "Дом 1",
+    icon: "🏠",
+    description:
+      "Первый настоящий домик для питомца.",
+    cost: 50000,
+    tapBonus: 3,
+    passiveBonus: 2,
+    sceneImage:
+      "/scene/house-1.png",
+  },
+
+  {
+    id: "house2",
+    name: "Дом 2",
+    icon: "🏡",
+    description:
+      "Больше места, тепла и комфорта.",
+    cost: 125500,
+    tapBonus: 5,
+    passiveBonus: 4,
+    sceneImage:
+      "/scene/house-2.png",
+  },
+
+  {
+    id: "house3",
+    name: "Дом 3",
+    icon: "🏡",
+    description:
+      "Большой уютный дом для счастливого котика.",
+    cost: 500000,
+    tapBonus: 8,
+    passiveBonus: 8,
+    sceneImage:
+      "/scene/house-3.png",
+  },
+
+  {
+    id: "house4",
+    name: "Дом 4",
+    icon: "🏰",
+    description:
+      "Роскошное место для отдыха.",
+    cost: 700000,
+    tapBonus: 12,
+    passiveBonus: 12,
+    sceneImage:
+      "/scene/house-4.png",
+  },
+
+  {
+    id: "house5",
+    name: "Дом 5",
+    icon: "🏯",
+    description:
+      "Почти настоящий кошачий дворец.",
+    cost: 950000,
+    tapBonus: 18,
+    passiveBonus: 18,
+    sceneImage:
+      "/scene/house-5.png",
+  },
+
+  {
+    id: "villa",
+    name: "Роскошная вилла",
+    icon: "🏰",
+    description:
+      "Лучший дом, который может получить котик.",
+    cost: 1300000,
+    tapBonus: 30,
+    passiveBonus: 25,
+    sceneImage:
+      "/scene/villa.png",
+  },
+];
+
+const BACKGROUNDS: Background[] = [
+  {
+    id: "background-0",
+    name: "Первая Встреча",
+    description:
+      "Та самая стартовая локация.",
+    image:
+      "/background/background-0.png",
+    cost: 0,
+  },
+
+  {
+    id: "background-1",
+    name: "Тёплый Вечер",
+    description:
+      "Более приятные условия для питомца.",
+    image:
+      "/background/background-1.png",
+    cost: 100000,
+  },
+
+  {
+    id: "background-2",
+    name: "Солнечный Двор",
+    description:
+      "Светлая атмосфера для котика.",
+    image:
+      "/background/background-2.png",
+    cost: 200000,
+  },
+
+  {
+    id: "background-3",
+    name: "Зелёный Сад",
+    description:
+      "Тихий сад, где котик может отдыхать.",
+    image:
+      "/background/background-3.png",
+    cost: 350000,
+  },
+
+  {
+    id: "background-4",
+    name: "Ночной Двор",
+    description:
+      "Спокойная атмосфера под звёздным небом.",
+    image:
+      "/background/background-4.png",
+    cost: 500000,
+  },
+
+  {
+    id: "background-5",
+    name: "Осенний Парк",
+    description:
+      "Тёплая осенняя локация.",
+    image:
+      "/background/background-5.png",
+    cost: 700000,
+  },
+
+  {
+    id: "background-6",
+    name: "Зимний Уют",
+    description:
+      "Снежная локация для тёплого дома.",
+    image:
+      "/background/background-6.png",
+    cost: 900000,
+  },
+
+  {
+    id: "background-7",
+    name: "Премиальный Двор",
+    description:
+      "Особенная локация для счастливого питомца.",
+    image:
+      "/background/background-7.png",
+    cost: 1200000,
+  },
+
+  {
+    id: "background-8",
+    name: "Большой Сад",
+    description:
+      "Просторная зелёная территория.",
+    image:
+      "/background/background-8.png",
+    cost: 1500000,
+  },
+
+  {
+    id: "background-9",
+    name: "Кошачий Рай",
+    description:
+      "Редкая финальная атмосфера.",
+    image:
+      "/background/background-9.png",
+    cost: 2000000,
+  },
+];
+
+/* =====================================================
+   ENERGY
+===================================================== */
+
+function calculateOfflineEnergy(
+  storedEnergy: number,
+  storedTimestamp: number
+) {
+  const now = Date.now();
+
+  const safeEnergy = Math.min(
+    MAX_ENERGY,
+    Math.max(
+      0,
+      storedEnergy
+    )
+  );
+
+  if (
+    !Number.isFinite(
+      storedTimestamp
+    ) ||
+    storedTimestamp <= 0 ||
+    storedTimestamp > now
+  ) {
+    return {
+      energy: safeEnergy,
+      timestamp: now,
+    };
+  }
+
+  if (
+    safeEnergy >= MAX_ENERGY
+  ) {
+    return {
+      energy: MAX_ENERGY,
+      timestamp: now,
+    };
+  }
+
+  const elapsed = Math.max(
+    0,
+    now - storedTimestamp
+  );
+
+  const recovered =
+    Math.floor(
+      elapsed /
+        ENERGY_REGEN_MS
+    );
+
+  const newEnergy =
+    Math.min(
+      MAX_ENERGY,
+      safeEnergy +
+        recovered
+    );
+
+  const newTimestamp =
+    newEnergy >= MAX_ENERGY
+      ? now
+      : storedTimestamp +
+        recovered *
+          ENERGY_REGEN_MS;
+
+  return {
+    energy: newEnergy,
+    timestamp: newTimestamp,
+  };
+}
+
+/* =====================================================
+   APP
+===================================================== */
+
+function App() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [supabaseReady, setSupabaseReady] = useState(false);
+  const [activeTab, setActiveTab] =
+    useState<Tab>("home");
+
+  const [upgradeSection, setUpgradeSection] =
+    useState<UpgradeSection>(
+      "items"
+    );
+
+  /* ===================================================
+     LANGUAGE
+  =================================================== */
+
+  const [language, setLanguage] =
+    useState<Language>(() => {
+      const stored =
+        getStoredString(
+          LANGUAGE_STORAGE_KEY,
+          "ru"
+        );
+
+      if (
+        stored === "en" ||
+        stored === "ua" ||
+        stored === "ru"
+      ) {
+        return stored;
+      }
+
+      return "ru";
+    });
+
+  const t =
+    translations[language];
+
+  useEffect(() => {
+    localStorage.setItem(
+      LANGUAGE_STORAGE_KEY,
+      language
+    );
+  }, [language]);
+
+  /* ===================================================
+     GAME STATE
+  =================================================== */
+
+  const [energy, setEnergy] =
+    useState(() => {
+      const storedEnergy =
+        getStoredNumber(
+          ENERGY_STORAGE_KEY,
+          MAX_ENERGY
+        );
+
+      const storedTimestamp =
+        getStoredNumber(
+          ENERGY_TIMESTAMP_KEY,
+          Date.now()
+        );
+
+      return calculateOfflineEnergy(
+        storedEnergy,
+        storedTimestamp
+      ).energy;
+    });
+
+  const [comfort, setComfort] =
+    useState(() =>
+      getStoredNumber(
+        "trusty_comfort",
+        0
+      )
+    );
+
+  const [petCount, setPetCount] =
+    useState(() =>
+      getStoredNumber(
+        "trusty_pet_count",
+        0
+      )
+    );
+
+  const [onlineSeconds, setOnlineSeconds] =
+    useState(() =>
+      getStoredNumber(
+        "trusty_online",
+        0
+      )
+    );
+
+  const [purchased, setPurchased] =
+    useState<string[]>(() =>
+      getStoredArray(
+        "trusty_upgrades"
+      )
+    );
+
+  const [
+    purchasedBackgrounds,
+    setPurchasedBackgrounds,
+  ] = useState<string[]>(() =>
+    getStoredArray(
+      "trusty_backgrounds"
+    )
+  );
+
+  const [
+    selectedBackground,
+    setSelectedBackground,
+  ] = useState(() =>
+    getStoredString(
+      "trusty_selected_background",
+      "background-0"
+    )
+  );
+
+  const [dailyAvailable, setDailyAvailable] =
+    useState(() =>
+      getStoredBoolean(
+        "trusty_daily_available",
+        true
+      )
+    );
+
+  const [onlineClaimed, setOnlineClaimed] =
+    useState(() =>
+      getStoredBoolean(
+        "trusty_online_claimed",
+        false
+      )
+    );
+
+  const [petClaimed, setPetClaimed] =
+    useState(() =>
+      getStoredBoolean(
+        "trusty_pet_claimed",
+        false
+      )
+    );
+
+  const [petName, setPetName] =
+    useState(() =>
+      getStoredString(
+        "trusty_pet_name",
+        ""
+      )
+    );
+
+  const [nameInput, setNameInput] =
+    useState("");
+
+  const [gameStarted, setGameStarted] =
+    useState(() =>
+      getStoredBoolean(
+        "trusty_game_started",
+        false
+      )
+    );
+
+  const [tapAnimation, setTapAnimation] =
+    useState(0);
+
+  const [rewardValue, setRewardValue] =
+    useState(0);
+
+  const [showReward, setShowReward] =
+    useState(false);
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [resetModalOpen, setResetModalOpen] =
+    useState(false);
+
+  /* ===================================================
+     SUPABASE AUTH + PLAYER PROFILE
+  =================================================== */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const ensurePlayerProfile = async (id: string) => {
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(
+          { id },
+          {
+            onConflict: "id",
+            ignoreDuplicates: true,
+          }
+        );
+
+      if (error) {
+        console.error(
+          "TrustyPaws profile creation error:",
+          error
+        );
+      }
+    };
+
+    const initSupabaseUser = async () => {
+      try {
+        console.log("TrustyPaws: connecting to Supabase...");
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          console.error(
+            "TrustyPaws getSession error:",
+            sessionError
+          );
+        }
+
+        let user = session?.user ?? null;
+
+        if (!user) {
+          console.log(
+            "TrustyPaws: no session, creating anonymous user..."
+          );
+
+          const { data, error } =
+            await supabase.auth.signInAnonymously();
+
+          if (error) {
+            console.error(
+              "TrustyPaws anonymous login error:",
+              error
+            );
+
+            if (!cancelled) {
+              setSupabaseReady(true);
+            }
+
+            return;
+          }
+
+          user = data.user;
+        }
+
+        if (!user) {
+          console.error(
+            "TrustyPaws: Supabase returned no user."
+          );
+
+          if (!cancelled) {
+            setSupabaseReady(true);
+          }
+
+          return;
+        }
+
+        await ensurePlayerProfile(user.id);
+
+        if (!cancelled) {
+          setUserId(user.id);
+          setSupabaseReady(true);
+        }
+
+        console.log(
+          "TrustyPaws Supabase user:",
+          user.id
+        );
+      } catch (error) {
+        console.error(
+          "TrustyPaws Supabase initialization error:",
+          error
+        );
+
+        if (!cancelled) {
+          setSupabaseReady(true);
+        }
+      }
+    };
+
+    void initSupabaseUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* ===================================================
+     UPGRADES
+  =================================================== */
+
+  const allUpgrades = useMemo(
+    () => [
+      ...ITEMS,
+      ...HOUSES,
+    ],
+    []
+  );
+
+  const passivePerMinute =
+    useMemo(() => {
+      const highestPurchasedHouse =
+        [
+          ...HOUSES,
+        ]
+          .reverse()
+          .find(
+            (house) =>
+              purchased.includes(
+                house.id
+              )
+          );
+
+      return (
+        highestPurchasedHouse
+          ?.passiveBonus ??
+        BASE_PASSIVE_PER_MINUTE
+      );
+    }, [purchased]);
+
+  const upgradeBonus =
+    useMemo(() => {
+      return allUpgrades.reduce(
+        (
+          total,
+          upgrade
+        ) => {
+          if (
+            purchased.includes(
+              upgrade.id
+            )
+          ) {
+            return (
+              total +
+              upgrade.tapBonus
+            );
+          }
+
+          return total;
+        },
+        0
+      );
+    }, [
+      purchased,
+      allUpgrades,
+    ]);
+
+  const tapReward =
+    BASE_TAP_REWARD +
+    upgradeBonus;
+
+  /* ===================================================
+     SUPABASE PROFILE SYNC
+
+     Сохраняем игровой профиль в облако с небольшой
+     задержкой, чтобы не отправлять запрос на каждый тап.
+  =================================================== */
+
+  useEffect(() => {
+    if (!supabaseReady || !userId) {
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      const username = `TP-${userId
+        .replace(/-/g, "")
+        .slice(0, 8)
+        .toUpperCase()}`;
+
+      const level = 1 + purchased.length;
+
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: userId,
+            username,
+            pet_name: petName,
+            comfort,
+            energy: Math.round(energy),
+            taps: petCount,
+            level,
+            selected_background: selectedBackground,
+            purchased,
+            purchased_backgrounds: purchasedBackgrounds,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "id",
+          }
+        );
+
+      if (error) {
+        console.error(
+          "TrustyPaws profile sync error:",
+          error
+        );
+        return;
+      }
+
+      console.log(
+        "TrustyPaws profile synced:",
+        username
+      );
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    supabaseReady,
+    userId,
+    petName,
+    comfort,
+    energy,
+    petCount,
+    purchased,
+    purchasedBackgrounds,
+    selectedBackground,
+  ]);
+
+  /* ===================================================
+     SAVE
+  =================================================== */
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_comfort",
+      String(comfort)
+    );
+  }, [comfort]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_pet_count",
+      String(petCount)
+    );
+  }, [petCount]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_online",
+      String(onlineSeconds)
+    );
+  }, [onlineSeconds]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_upgrades",
+      JSON.stringify(purchased)
+    );
+  }, [purchased]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_backgrounds",
+      JSON.stringify(
+        purchasedBackgrounds
+      )
+    );
+  }, [purchasedBackgrounds]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_selected_background",
+      selectedBackground
+    );
+  }, [selectedBackground]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_daily_available",
+      String(dailyAvailable)
+    );
+  }, [dailyAvailable]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_online_claimed",
+      String(onlineClaimed)
+    );
+  }, [onlineClaimed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_pet_claimed",
+      String(petClaimed)
+    );
+  }, [petClaimed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_pet_name",
+      petName
+    );
+  }, [petName]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "trusty_game_started",
+      String(gameStarted)
+    );
+  }, [gameStarted]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      ENERGY_STORAGE_KEY,
+      String(energy)
+    );
+  }, [energy]);
+
+  /* ===================================================
+     ENERGY REGEN
+  =================================================== */
+
+  useEffect(() => {
+    const timer =
+      window.setInterval(() => {
+        const now =
+          Date.now();
+
+        const storedEnergy =
+          getStoredNumber(
+            ENERGY_STORAGE_KEY,
+            energy
+          );
+
+        const storedTimestamp =
+          getStoredNumber(
+            ENERGY_TIMESTAMP_KEY,
+            now
+          );
+
+        const result =
+          calculateOfflineEnergy(
+            storedEnergy,
+            storedTimestamp
+          );
+
+        if (
+          result.energy !==
+          storedEnergy
+        ) {
+          setEnergy(
+            result.energy
+          );
+        }
+
+        localStorage.setItem(
+          ENERGY_STORAGE_KEY,
+          String(result.energy)
+        );
+
+        localStorage.setItem(
+          ENERGY_TIMESTAMP_KEY,
+          String(
+            result.timestamp
+          )
+        );
+      }, 1000);
+
+    return () =>
+      window.clearInterval(
+        timer
+      );
+  }, [energy]);
+
+  /* ===================================================
+     ENERGY VISIBILITY
+  =================================================== */
+
+  useEffect(() => {
+    const syncEnergy = () => {
+      const now =
+        Date.now();
+
+      const storedEnergy =
+        getStoredNumber(
+          ENERGY_STORAGE_KEY,
+          energy
+        );
+
+      const storedTimestamp =
+        getStoredNumber(
+          ENERGY_TIMESTAMP_KEY,
+          now
+        );
+
+      const result =
+        calculateOfflineEnergy(
+          storedEnergy,
+          storedTimestamp
+        );
+
+      setEnergy(
+        result.energy
+      );
+
+      localStorage.setItem(
+        ENERGY_STORAGE_KEY,
+        String(result.energy)
+      );
+
+      localStorage.setItem(
+        ENERGY_TIMESTAMP_KEY,
+        String(
+          result.timestamp
+        )
+      );
+    };
+
+    const handleVisibility =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          syncEnergy();
+        }
+      };
+
+    window.addEventListener(
+      "focus",
+      syncEnergy
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibility
+    );
+
+    return () => {
+      window.removeEventListener(
+        "focus",
+        syncEnergy
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibility
+      );
+    };
+  }, [energy]);
+
+  /* ===================================================
+     PASSIVE INCOME
+  =================================================== */
+
+  useEffect(() => {
+    const now =
+      Date.now();
+
+    const lastTime =
+      getStoredNumber(
+        PASSIVE_TIMESTAMP_KEY,
+        now
+      );
+
+    if (
+      !Number.isFinite(
+        lastTime
+      ) ||
+      lastTime > now ||
+      lastTime <= 0
+    ) {
+      localStorage.setItem(
+        PASSIVE_TIMESTAMP_KEY,
+        String(now)
+      );
+
+      return;
+    }
+
+    const elapsedMinutes =
+      (now - lastTime) /
+      60000;
+
+    if (
+      elapsedMinutes > 0 &&
+      passivePerMinute > 0
+    ) {
+      setComfort(
+        (current) =>
+          current +
+          elapsedMinutes *
+            passivePerMinute
+      );
+    }
+
+    localStorage.setItem(
+      PASSIVE_TIMESTAMP_KEY,
+      String(now)
+    );
+  }, [passivePerMinute]);
+
+  useEffect(() => {
+    const timer =
+      window.setInterval(() => {
+        const now =
+          Date.now();
+
+        const previous =
+          getStoredNumber(
+            PASSIVE_TIMESTAMP_KEY,
+            now
+          );
+
+        if (
+          !Number.isFinite(
+            previous
+          ) ||
+          previous > now
+        ) {
+          localStorage.setItem(
+            PASSIVE_TIMESTAMP_KEY,
+            String(now)
+          );
+
+          return;
+        }
+
+        const elapsedMs =
+          now - previous;
+
+        if (
+          elapsedMs < 1000
+        ) {
+          return;
+        }
+
+        const reward =
+          (elapsedMs / 60000) *
+          passivePerMinute;
+
+        if (
+          reward > 0
+        ) {
+          setComfort(
+            (current) =>
+              current + reward
+          );
+        }
+
+        localStorage.setItem(
+          PASSIVE_TIMESTAMP_KEY,
+          String(now)
+        );
+      }, 5000);
+
+    return () =>
+      window.clearInterval(
+        timer
+      );
+  }, [passivePerMinute]);
+
+  /* ===================================================
+     ONLINE TASK
+  =================================================== */
+
+  useEffect(() => {
+    if (
+      onlineSeconds >=
+      ONLINE_GOAL
+    ) {
+      return;
+    }
+
+    const timer =
+      window.setInterval(() => {
+        setOnlineSeconds(
+          (value) =>
+            Math.min(
+              ONLINE_GOAL,
+              value + 1
+            )
+        );
+      }, 1000);
+
+    return () =>
+      window.clearInterval(
+        timer
+      );
+  }, [onlineSeconds]);
+
+  /* ===================================================
+     TAP
+  =================================================== */
+
+  const petCat = () => {
+    if (
+      energy <= 0
+    ) {
+      return;
+    }
+
+    const now =
+      Date.now();
+
+    if (
+      energy >=
+      MAX_ENERGY
+    ) {
+      localStorage.setItem(
+        ENERGY_TIMESTAMP_KEY,
+        String(now)
+      );
+    }
+
+    setEnergy(
+      (value) =>
+        Math.max(
+          0,
+          value - 1
+        )
+    );
+
+    setComfort(
+      (value) =>
+        value + tapReward
+    );
+
+    setPetCount(
+      (value) =>
+        Math.min(
+          PET_GOAL,
+          value + 1
+        )
+    );
+
+    setRewardValue(
+      tapReward
+    );
+
+    setTapAnimation(
+      (value) => value + 1
+    );
+
+    setShowReward(
+      true
+    );
+
+    window.setTimeout(() => {
+      setShowReward(
+        false
+      );
+    }, 650);
+  };
+
+  /* ===================================================
+     BUY UPGRADE
+  =================================================== */
+
+  const buyUpgrade = (
+    upgrade: Upgrade
+  ) => {
+    if (
+      purchased.includes(
+        upgrade.id
+      )
+    ) {
+      return;
+    }
+
+    if (
+      comfort <
+      upgrade.cost
+    ) {
+      return;
+    }
+
+    setComfort(
+      (value) =>
+        Math.max(
+          0,
+          value -
+            upgrade.cost
+        )
+    );
+
+    setPurchased(
+      (items) => [
+        ...items,
+        upgrade.id,
+      ]
+    );
+
+    if (
+      upgrade.passiveBonus >
+      0
+    ) {
+      localStorage.setItem(
+        PASSIVE_TIMESTAMP_KEY,
+        String(
+          Date.now()
+        )
+      );
+    }
+  };
+
+  /* ===================================================
+     BUY BACKGROUND
+  =================================================== */
+
+  const buyBackground = (
+    background: Background
+  ) => {
+    if (
+      background.id ===
+      "background-0"
+    ) {
+      setSelectedBackground(
+        "background-0"
+      );
+
+      if (
+        !purchasedBackgrounds.includes(
+          "background-0"
+        )
+      ) {
+        setPurchasedBackgrounds(
+          (items) => [
+            ...items,
+            "background-0",
+          ]
+        );
+      }
+
+      return;
+    }
+
+    if (
+      purchasedBackgrounds.includes(
+        background.id
+      )
+    ) {
+      setSelectedBackground(
+        background.id
+      );
+
+      return;
+    }
+
+    if (
+      comfort <
+      background.cost
+    ) {
+      return;
+    }
+
+    setComfort(
+      (value) =>
+        Math.max(
+          0,
+          value -
+            background.cost
+        )
+    );
+
+    setPurchasedBackgrounds(
+      (items) => [
+        ...items,
+        background.id,
+      ]
+    );
+
+    setSelectedBackground(
+      background.id
+    );
+  };
+
+  /* ===================================================
+     START GAME
+  =================================================== */
+
+  const startGame = () => {
+    const cleanName =
+      nameInput.trim();
+
+    if (!cleanName) {
+      return;
+    }
+
+    setPetName(
+      cleanName
+    );
+
+    setGameStarted(
+      true
+    );
+
+    const storedEnergy =
+      getStoredNumber(
+        ENERGY_STORAGE_KEY,
+        MAX_ENERGY
+      );
+
+    const storedTimestamp =
+      getStoredNumber(
+        ENERGY_TIMESTAMP_KEY,
+        Date.now()
+      );
+
+    const result =
+      calculateOfflineEnergy(
+        storedEnergy,
+        storedTimestamp
+      );
+
+    setEnergy(
+      result.energy
+    );
+
+    localStorage.setItem(
+      ENERGY_STORAGE_KEY,
+      String(
+        result.energy
+      )
+    );
+
+    localStorage.setItem(
+      ENERGY_TIMESTAMP_KEY,
+      String(
+        result.timestamp
+      )
+    );
+  };
+
+  /* ===================================================
+     TASKS
+  =================================================== */
+
+  const claimDaily = () => {
+    if (
+      !dailyAvailable
+    ) {
+      return;
+    }
+
+    setComfort(
+      (value) =>
+        value +
+        DAILY_REWARD
+    );
+
+    setDailyAvailable(
+      false
+    );
+  };
+
+  const claimOnline = () => {
+    if (
+      onlineSeconds <
+        ONLINE_GOAL ||
+      onlineClaimed
+    ) {
+      return;
+    }
+
+    setComfort(
+      (value) =>
+        value +
+        ONLINE_REWARD
+    );
+
+    setOnlineClaimed(
+      true
+    );
+  };
+
+  const claimPet = () => {
+    if (
+      petCount <
+        PET_GOAL ||
+      petClaimed
+    ) {
+      return;
+    }
+
+    setComfort(
+      (value) =>
+        value +
+        PET_REWARD
+    );
+
+    setPetClaimed(
+      true
+    );
+  };
+
+  /* ===================================================
+     RESET
+  =================================================== */
+
+  const resetProgress =
+    () => {
+      const savedLanguage = language;
+
+      localStorage.clear();
+
+      const now =
+        Date.now();
+
+      setComfort(0);
+      setEnergy(
+        MAX_ENERGY
+      );
+      setPetCount(0);
+      setOnlineSeconds(0);
+
+      setPurchased([]);
+
+      setPurchasedBackgrounds(
+        ["background-0"]
+      );
+
+      setSelectedBackground(
+        "background-0"
+      );
+
+      setDailyAvailable(
+        true
+      );
+
+      setOnlineClaimed(
+        false
+      );
+
+      setPetClaimed(
+        false
+      );
+
+      setPetName("");
+      setNameInput("");
+
+      setGameStarted(
+        false
+      );
+
+      setMenuOpen(
+        false
+      );
+
+      setResetModalOpen(
+        false
+      );
+
+      setActiveTab(
+        "home"
+      );
+
+      setUpgradeSection(
+        "items"
+      );
+
+      localStorage.setItem(
+        ENERGY_STORAGE_KEY,
+        String(
+          MAX_ENERGY
+        )
+      );
+
+      localStorage.setItem(
+        ENERGY_TIMESTAMP_KEY,
+        String(now)
+      );
+
+      localStorage.setItem(
+        PASSIVE_TIMESTAMP_KEY,
+        String(now)
+      );
+
+      localStorage.setItem(
+        LANGUAGE_STORAGE_KEY,
+        savedLanguage
+      );
+
+      localStorage.setItem(
+        "trusty_selected_background",
+        "background-0"
+      );
+
+      localStorage.setItem(
+        "trusty_backgrounds",
+        JSON.stringify([
+          "background-0",
+        ])
+      );
+    };
+
+  /* ===================================================
+     FORMAT
+  =================================================== */
+
+  const formatNumber = (
+    value: number
+  ) => {
+    const locale =
+      language === "en"
+        ? "en-US"
+        : language === "ua"
+        ? "uk-UA"
+        : "ru-RU";
+
+    return value.toLocaleString(
+      locale,
+      {
+        maximumFractionDigits: 2,
+      }
+    );
+  };
+
+  const formatTime = (
+    seconds: number
+  ) => {
+    const safeSeconds =
+      Math.max(
+        0,
+        Math.floor(
+          seconds
+        )
+      );
+
+    const minutes =
+      Math.floor(
+        safeSeconds / 60
+      );
+
+    const sec =
+      safeSeconds % 60;
+
+    return `${String(
+      minutes
+    ).padStart(
+      2,
+      "0"
+    )}:${String(
+      sec
+    ).padStart(
+      2,
+      "0"
+    )}`;
+  };
+
+  /* ===================================================
+     INTRO
+  =================================================== */
+
+  if (!gameStarted) {
+    return (
+      <IntroScreen
+        language={
+          language
+        }
+        setLanguage={
+          setLanguage
+        }
+        t={t}
+        nameInput={
+          nameInput
+        }
+        setNameInput={
+          setNameInput
+        }
+        onStart={
+          startGame
+        }
+      />
+    );
+  }
+
+  const hasTaskReward =
+    dailyAvailable ||
+    (
+      onlineSeconds >=
+        ONLINE_GOAL &&
+      !onlineClaimed
+    ) ||
+    (
+      petCount >=
+        PET_GOAL &&
+      !petClaimed
+    );
+
+  return (
+    <div className="app">
+
+      <div className="game-shell">
+
+        {/* TOP BAR */}
+
+        <header className="topbar">
+
+          <button
+            className="brand"
+            type="button"
+            onClick={() =>
+              setActiveTab(
+                "home"
+              )
+            }
+          >
+            <span className="brand-mark">
+              🐾
+            </span>
+
+            <span className="brand-name">
+              <strong>
+                Trusty
+              </strong>
+
+              <em>
+                Paws
+              </em>
+            </span>
+          </button>
+
+          <div className="topbar-balance">
+            <span>
+              🐾
+            </span>
+
+            <strong>
+              {formatNumber(
+                comfort
+              )}
+            </strong>
+          </div>
+
+          <button
+            className={`menu-button ${
+              menuOpen
+                ? "menu-open"
+                : ""
+            }`}
+            type="button"
+            aria-label={
+              t.settings
+            }
+            onClick={() =>
+              setMenuOpen(
+                (value) =>
+                  !value
+              )
+            }
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          {menuOpen && (
+            <div className="settings-menu">
+
+              <div className="settings-menu-title">
+                <span>
+                  ⚙️
+                </span>
+
+                {t.settings}
+              </div>
+
+              {/* LANGUAGE */}
+
+              <div className="language-settings">
+
+                <div className="language-settings-header">
+
+                  <div className="language-globe">
+                    🌐
+                  </div>
+
+                  <div className="language-info">
+                    <strong>
+                      {t.language}
+                    </strong>
+
+                    <small>
+                      {language === "ru"
+                        ? "Русский"
+                        : language === "ua"
+                        ? "Українська"
+                        : "English"}
+                    </small>
+                  </div>
+
+                </div>
+
+                <div className="language-buttons">
+
+                  <button
+                    type="button"
+                    className={
+                      language === "ru"
+                        ? "active"
+                        : ""
+                    }
+                    onClick={() =>
+                      setLanguage("ru")
+                    }
+                    aria-label="Русский"
+                  >
+                    <span className="language-flag">
+                      🇷🇺
+                    </span>
+                    <span className="language-code">
+                      RU
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={
+                      language === "ua"
+                        ? "active"
+                        : ""
+                    }
+                    onClick={() =>
+                      setLanguage("ua")
+                    }
+                    aria-label="Українська"
+                  >
+                    <span className="language-flag">
+                      🇺🇦
+                    </span>
+                    <span className="language-code">
+                      UA
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={
+                      language === "en"
+                        ? "active"
+                        : ""
+                    }
+                    onClick={() =>
+                      setLanguage("en")
+                    }
+                    aria-label="English"
+                  >
+                    <span className="language-flag">
+                      🇬🇧
+                    </span>
+                    <span className="language-code">
+                      EN
+                    </span>
+                  </button>
+
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                className="reset-menu-button"
+                onClick={() => {
+                  setMenuOpen(
+                    false
+                  );
+
+                  setResetModalOpen(
+                    true
+                  );
+                }}
+              >
+                <span className="reset-menu-icon">
+                  ↻
+                </span>
+
+                <span>
+                  <strong>
+                    {
+                      t.resetProgress
+                    }
+                  </strong>
+
+                  <small>
+                    {
+                      t.restartGame
+                    }
+                  </small>
+                </span>
+              </button>
+
+            </div>
+          )}
+
+        </header>
+
+        {/* MAIN */}
+
+        <main className="main-content">
+
+          {activeTab ===
+            "home" && (
+            <HomeScreen
+              t={t}
+              petName={
+                petName
+              }
+              comfort={
+                comfort
+              }
+              energy={
+                energy
+              }
+              petCount={
+                petCount
+              }
+              tapReward={
+                tapReward
+              }
+              passivePerMinute={
+                passivePerMinute
+              }
+              purchased={
+                purchased
+              }
+              selectedBackground={
+                selectedBackground
+              }
+              tapAnimation={
+                tapAnimation
+              }
+              rewardValue={
+                rewardValue
+              }
+              showReward={
+                showReward
+              }
+              onPet={
+                petCat
+              }
+              formatNumber={
+                formatNumber
+              }
+            />
+          )}
+
+          {activeTab ===
+            "upgrades" && (
+            <UpgradesScreen
+              t={t}
+              section={
+                upgradeSection
+              }
+              setSection={
+                setUpgradeSection
+              }
+              comfort={
+                comfort
+              }
+              tapReward={
+                tapReward
+              }
+              passivePerMinute={
+                passivePerMinute
+              }
+              purchased={
+                purchased
+              }
+              purchasedBackgrounds={
+                purchasedBackgrounds
+              }
+              selectedBackground={
+                selectedBackground
+              }
+              onBuy={
+                buyUpgrade
+              }
+              onBuyBackground={
+                buyBackground
+              }
+              formatNumber={
+                formatNumber
+              }
+            />
+          )}
+
+          {activeTab ===
+            "tasks" && (
+            <TasksScreen
+              t={t}
+              dailyAvailable={
+                dailyAvailable
+              }
+              onlineProgress={
+                Math.min(
+                  100,
+                  (onlineSeconds /
+                    ONLINE_GOAL) *
+                    100
+                )
+              }
+              onlineSeconds={
+                onlineSeconds
+              }
+              onlineClaimed={
+                onlineClaimed
+              }
+              petProgress={
+                Math.min(
+                  100,
+                  (petCount /
+                    PET_GOAL) *
+                    100
+                )
+              }
+              petCount={
+                petCount
+              }
+              petClaimed={
+                petClaimed
+              }
+              claimedTasks={
+                Number(
+                  onlineClaimed
+                ) +
+                Number(
+                  petClaimed
+                )
+              }
+              onClaimDaily={
+                claimDaily
+              }
+              onClaimOnline={
+                claimOnline
+              }
+              onClaimPet={
+                claimPet
+              }
+              formatTime={
+                formatTime
+              }
+            />
+          )}
+
+          {activeTab ===
+            "friends" && (
+            <FriendsScreen
+              t={t}
+              language={language}
+              userId={userId}
+              supabaseReady={supabaseReady}
+              formatNumber={formatNumber}
+            />
+          )}
+
+          {activeTab ===
+            "shop" && (
+            <ShopScreen
+              t={t}
+            />
+          )}
+
+        </main>
+
+        {/* BOTTOM NAV */}
+
+        <BottomNavigation
+          t={t}
+          activeTab={
+            activeTab
+          }
+          setActiveTab={
+            setActiveTab
+          }
+          hasTaskReward={
+            hasTaskReward
+          }
+        />
+
+      </div>
+
+      {/* RESET MODAL */}
+
+      {resetModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() =>
+            setResetModalOpen(
+              false
+            )
+          }
+        >
+          <div
+            className="reset-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+
+            <div className="reset-modal-icon">
+              ↻
+            </div>
+
+            <h2>
+              {t.resetTitle}
+            </h2>
+
+            <p>
+              {
+                t.resetDescription
+              }
+            </p>
+
+            <div className="reset-modal-actions">
+
+              <button
+                type="button"
+                className="cancel-reset"
+                onClick={() =>
+                  setResetModalOpen(
+                    false
+                  )
+                }
+              >
+                {t.cancel}
+              </button>
+
+              <button
+                type="button"
+                className="confirm-reset"
+                onClick={
+                  resetProgress
+                }
+              >
+                {t.reset}
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+/* =====================================================
+   INTRO SCREEN
+===================================================== */
+
+function IntroScreen({
+  language,
+  setLanguage,
+  t,
+  nameInput,
+  setNameInput,
+  onStart,
+}: {
+  language: Language;
+  setLanguage: (
+    language: Language
+  ) => void;
+  t: Translation;
+  nameInput: string;
+  setNameInput: (
+    value: string
+  ) => void;
+  onStart: () => void;
+}) {
+  return (
+    <div className="intro-screen">
+
+      <div className="intro-background" />
+
+      <div className="intro-rain" />
+
+      {/* LANGUAGE SWITCHER */}
+
+      <div className="intro-language-switcher">
+
+        <div className="intro-language-buttons">
+
+          <button
+            type="button"
+            className={
+              language === "ru"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setLanguage("ru")
+            }
+            aria-label="Русский"
+          >
+            <span>🇷🇺</span>
+            <b>RU</b>
+          </button>
+
+          <button
+            type="button"
+            className={
+              language === "ua"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setLanguage("ua")
+            }
+            aria-label="Українська"
+          >
+            <span>🇺🇦</span>
+            <b>UA</b>
+          </button>
+
+          <button
+            type="button"
+            className={
+              language === "en"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setLanguage("en")
+            }
+            aria-label="English"
+          >
+            <span>🇬🇧</span>
+            <b>EN</b>
+          </button>
+
+        </div>
+
+      </div>
+
+      <div className="intro-content">
+
+        <div className="intro-logo">
+
+          <span>
+            🐾
+          </span>
+
+          <strong>
+            TRUSTY
+            <em>
+              PAWS
+            </em>
+          </strong>
+
+        </div>
+
+        <div className="intro-cat-wrap">
+
+          <div className="intro-cat-glow" />
+
+          <img
+            src="/cat-3d.png"
+            alt="Pet"
+            className="intro-cat"
+            draggable="false"
+          />
+
+        </div>
+
+        <div className="intro-copy">
+
+          <span className="intro-eyebrow">
+            {t.introEyebrow}
+          </span>
+
+          <h1>
+            {t.introTitle}
+          </h1>
+
+          <p>
+            {
+              t.introDescription
+            }
+          </p>
+
+        </div>
+
+        <div className="name-form">
+
+          <input
+            value={
+              nameInput
+            }
+            onChange={(event) =>
+              setNameInput(
+                event.target.value
+              )
+            }
+            onKeyDown={(event) => {
+              if (
+                event.key ===
+                "Enter"
+              ) {
+                onStart();
+              }
+            }}
+            placeholder={
+              t.petNamePlaceholder
+            }
+            maxLength={18}
+          />
+
+          <button
+            type="button"
+            onClick={
+              onStart
+            }
+            disabled={
+              !nameInput.trim()
+            }
+          >
+            <span>
+              {t.takePet}
+            </span>
+
+            <b>
+              →
+            </b>
+          </button>
+
+        </div>
+
+        <small className="intro-note">
+          {t.introNote}
+        </small>
+
+      </div>
+
+    </div>
+  );
+}
+
+/* =====================================================
+   HOME
+===================================================== */
+
+function HomeScreen({
+  t,
+  petName,
+  comfort,
+  energy,
+  petCount,
+  tapReward,
+  passivePerMinute,
+  purchased,
+  selectedBackground,
+  tapAnimation,
+  rewardValue,
+  showReward,
+  onPet,
+  formatNumber,
+}: {
+  t: Translation;
+  petName: string;
+  comfort: number;
+  energy: number;
+  petCount: number;
+  tapReward: number;
+  passivePerMinute: number;
+  purchased: string[];
+  selectedBackground: string;
+  tapAnimation: number;
+  rewardValue: number;
+  showReward: boolean;
+  onPet: () => void;
+  formatNumber: (
+    value: number
+  ) => string;
+}) {
+  const energyPercent =
+    Math.min(
+      100,
+      Math.max(
+        0,
+        (energy /
+          MAX_ENERGY) *
+          100
+      )
+    );
+
+  const hasBox =
+    purchased.includes(
+      "box"
+    );
+
+  const selectedBlanket =
+    [
+      ...ITEMS,
+    ]
+      .reverse()
+      .find(
+        (item) =>
+          item.itemType ===
+            "blanket" &&
+          purchased.includes(
+            item.id
+          )
+      );
+
+  const selectedBowl =
+    [
+      ...ITEMS,
+    ]
+      .reverse()
+      .find(
+        (item) =>
+          item.itemType ===
+            "bowl" &&
+          purchased.includes(
+            item.id
+          )
+      );
+
+  const highestHouse =
+    useMemo(() => {
+      const houses = [
+        "villa",
+        "house5",
+        "house4",
+        "house3",
+        "house2",
+        "house1",
+      ];
+
+      return houses.find(
+        (id) =>
+          purchased.includes(
+            id
+          )
+      );
+    }, [purchased]);
+
+  const highestHouseData =
+    highestHouse
+      ? HOUSES.find(
+          (item) =>
+            item.id ===
+            highestHouse
+        )
+      : undefined;
+
+  const environmentLevel =
+    purchased.length;
+
+  return (
+    <div className="page home-page">
+
+      <section className="balance-card">
+
+        <div className="balance-left">
+
+          <div className="balance-paw">
+            🐾
+          </div>
+
+          <div>
+
+            <span className="eyebrow">
+              {t.petComfort}
+            </span>
+
+            <div className="balance-value">
+              {formatNumber(
+                comfort
+              )}
+            </div>
+
+            <span className="balance-unit">
+              {t.comfort}
+            </span>
+
+          </div>
+
+        </div>
+
+        <div className="tap-income">
+
+          <span>
+            {t.perTap}
+          </span>
+
+          <strong>
+            +
+            {formatNumber(
+              tapReward
+            )}
+          </strong>
+
+        </div>
+
+      </section>
+
+      <section className="cat-card">
+
+        <div className="cat-card-top">
+
+          <div>
+
+            <span className="eyebrow">
+              {t.yourPet}
+            </span>
+
+            <h1>
+              {petName}
+            </h1>
+
+            <p className="cat-condition">
+              {environmentLevel ===
+              0
+                ? t.cold
+                : environmentLevel <
+                  3
+                ? t.warmer
+                : t.feelsHome}
+            </p>
+
+          </div>
+
+          <div className="level-pill">
+
+            <span>
+              {t.lvl}
+            </span>
+
+            <strong>
+              {1 +
+                purchased.length}
+            </strong>
+
+          </div>
+
+        </div>
+
+        <div
+          className={`cat-scene environment-${environmentLevel}`}
+        >
+
+          <img
+            src={`/background/${selectedBackground}.png`}
+            className="scene-background-image"
+            alt=""
+            draggable="false"
+            onError={(event) => {
+              const image =
+                event.currentTarget;
+
+              if (
+                !image.dataset
+                  .fallback
+              ) {
+                image.dataset.fallback =
+                  "true";
+
+                image.src =
+                  "/background/background-0.png";
+              }
+            }}
+          />
+
+          <div className="scene-overlay" />
+
+          <div className="scene-sky" />
+
+          <div className="rain-layer">
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+
+          <div className="scene-ground-back" />
+
+          {highestHouseData && (
+            <img
+              src={
+                highestHouseData.sceneImage
+              }
+              className="scene-object scene-house"
+              alt=""
+              draggable="false"
+            />
+          )}
+
+          {hasBox &&
+            !highestHouse && (
+            <img
+              src="/scene/box.png"
+              className="scene-object scene-box"
+              alt=""
+              draggable="false"
+            />
+          )}
+
+          {selectedBlanket?.sceneImage && (
+            <img
+              src={
+                selectedBlanket.sceneImage
+              }
+              className="scene-object scene-blanket"
+              alt=""
+              draggable="false"
+            />
+          )}
+
+          {selectedBowl?.sceneImage && (
+            <img
+              src={
+                selectedBowl.sceneImage
+              }
+              className="scene-object scene-bowl"
+              alt=""
+              draggable="false"
+            />
+          )}
+
+          <div className="scene-ground" />
+
+          <div className="scene-shadow" />
+
+          <button
+            type="button"
+            className={`cat-button ${
+              energy <= 0
+                ? "disabled"
+                : ""
+            }`}
+            onClick={
+              onPet
+            }
+            disabled={
+              energy <= 0
+            }
+            aria-label={
+              t.tapCat
+            }
+          >
+
+            <img
+              src="/cat-3d.png"
+              alt={petName}
+              className="cat-image"
+              draggable="false"
+            />
+
+          </button>
+
+          {showReward && (
+            <div
+              key={
+                tapAnimation
+              }
+              className="floating-reward"
+            >
+              +
+              {formatNumber(
+                rewardValue
+              )}
+            </div>
+          )}
+
+          <div className="scene-condition">
+
+            {environmentLevel ===
+              0 && (
+              <>
+                <span>
+                  ❤️
+                </span>
+                {t.catFeelsGood}
+              </>
+            )}
+
+            {environmentLevel >
+              0 &&
+              environmentLevel <
+                3 && (
+                <>
+                  <span>
+                    🏠
+                  </span>
+                  {t.gettingCozy}
+                </>
+              )}
+
+            {environmentLevel >=
+              3 && (
+              <>
+                <span>
+                  ❤️
+                </span>
+                {t.catFeelsGood}
+              </>
+            )}
+
+          </div>
+
+        </div>
+
+        <div className="cat-hint">
+          {energy > 0
+            ? t.tapCat
+            : t.waitEnergy}
+        </div>
+
+        <div className="energy-box">
+
+          <div className="energy-top">
+
+            <div className="energy-title">
+
+              <span className="energy-symbol">
+                ⚡
+              </span>
+
+              <div>
+
+                <strong>
+                  {t.energy}
+                </strong>
+
+                <small>
+                  {energy <
+                    MAX_ENERGY
+                    ? t.everyTwoSeconds
+                    : t.fullyRestored}
+                </small>
+
+              </div>
+
+            </div>
+
+            <strong className="energy-count">
+              {energy}/
+              {MAX_ENERGY}
+            </strong>
+
+          </div>
+
+          <div className="energy-track">
+
+            <div
+              className="energy-progress"
+              style={{
+                width: `${energyPercent}%`,
+              }}
+            />
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <section className="stats-grid">
+
+        <Stat
+          icon="⚡"
+          value={String(
+            energy
+          )}
+          label={
+            t.energy
+          }
+        />
+
+        <Stat
+          icon="🐾"
+          value={formatNumber(
+            petCount
+          )}
+          label={
+            t.taps
+          }
+        />
+
+        <Stat
+          icon="✦"
+          value={`+${formatNumber(
+            tapReward
+          )}`}
+          label={
+            t.perTapLabel
+          }
+        />
+
+      </section>
+
+      <section className="passive-card">
+
+        <div className="passive-icon">
+          ✦
+        </div>
+
+        <div className="passive-main">
+
+          <span>
+            {t.passiveComfort}
+          </span>
+
+          <strong>
+            {passivePerMinute >
+            0
+              ? `+${formatNumber(
+                  passivePerMinute
+                )} ${t.minuteText}`
+              : `0 ${t.minuteText}`}
+          </strong>
+
+          <small>
+            {passivePerMinute >
+            0
+              ? t.passiveDescription
+              : t.passiveLocked}
+          </small>
+
+        </div>
+
+        <div
+          className={`passive-status ${
+            passivePerMinute >
+            0
+              ? ""
+              : "passive-locked"
+          }`}
+        >
+
+          <span />
+
+          {passivePerMinute >
+          0
+            ? t.passiveWorks
+            : t.passiveInactive}
+
+        </div>
+
+      </section>
+
+    </div>
+  );
+}
+
+/* =====================================================
+   UPGRADES
+===================================================== */
+
+function UpgradesScreen({
+  t,
+  section,
+  setSection,
+  comfort,
+  tapReward,
+  passivePerMinute,
+  purchased,
+  purchasedBackgrounds,
+  selectedBackground,
+  onBuy,
+  onBuyBackground,
+  formatNumber,
+}: {
+  t: Translation;
+  section: UpgradeSection;
+  setSection: (
+    section: UpgradeSection
+  ) => void;
+  comfort: number;
+  tapReward: number;
+  passivePerMinute: number;
+  purchased: string[];
+  purchasedBackgrounds: string[];
+  selectedBackground: string;
+  onBuy: (
+    upgrade: Upgrade
+  ) => void;
+  onBuyBackground: (
+    background: Background
+  ) => void;
+  formatNumber: (
+    value: number
+  ) => string;
+}) {
+  return (
+    <div className="page">
+
+      <PageHeader
+        eyebrow={
+          t.development
+        }
+        title={
+          t.upgradesTitle
+        }
+        subtitle={
+          t.upgradesSubtitle
+        }
+      />
+
+      <section className="upgrade-income">
+
+        <div className="upgrade-income-icon">
+          ✦
+        </div>
+
+        <div>
+
+          <span>
+            {t.income}
+          </span>
+
+          <strong>
+            +
+            {formatNumber(
+              tapReward
+            )}{" "}
+            {t.perTapText}
+          </strong>
+
+          <small>
+            {passivePerMinute >
+            0
+              ? `+${formatNumber(
+                  passivePerMinute
+                )} ${t.passivePerMinute}`
+              : t.passiveAfterHouse}
+          </small>
+
+        </div>
+
+        <div className="upgrade-income-balance">
+          🐾{" "}
+          {formatNumber(
+            comfort
+          )}
+        </div>
+
+      </section>
+
+      <div className="upgrade-tabs">
+
+        <button
+          type="button"
+          className={
+            section ===
+            "items"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setSection(
+              "items"
+            )
+          }
+        >
+          <span>
+            🧸
+          </span>
+
+          <strong>
+            {t.items}
+          </strong>
+        </button>
+
+        <button
+          type="button"
+          className={
+            section ===
+            "houses"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setSection(
+              "houses"
+            )
+          }
+        >
+          <span>
+            🏠
+          </span>
+
+          <strong>
+            {t.houses}
+          </strong>
+        </button>
+
+        <button
+          type="button"
+          className={
+            section ===
+            "backgrounds"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setSection(
+              "backgrounds"
+            )
+          }
+        >
+          <span>
+            🌄
+          </span>
+
+          <strong>
+            {t.backgrounds}
+          </strong>
+        </button>
+
+      </div>
+
+      {section ===
+        "items" && (
+        <UpgradeList
+          title={
+            t.itemsUpper
+          }
+          items={
+            ITEMS
+          }
+          purchased={
+            purchased
+          }
+          comfort={
+            comfort
+          }
+          onBuy={
+            onBuy
+          }
+          formatNumber={
+            formatNumber
+          }
+          t={t}
+        />
+      )}
+
+      {section ===
+        "houses" && (
+        <UpgradeList
+          title={
+            t.housesUpper
+          }
+          items={
+            HOUSES
+          }
+          purchased={
+            purchased
+          }
+          comfort={
+            comfort
+          }
+          onBuy={
+            onBuy
+          }
+          formatNumber={
+            formatNumber
+          }
+          t={t}
+        />
+      )}
+
+      {section ===
+        "backgrounds" && (
+        <BackgroundList
+          backgrounds={
+            BACKGROUNDS
+          }
+          purchasedBackgrounds={
+            purchasedBackgrounds
+          }
+          selectedBackground={
+            selectedBackground
+          }
+          comfort={
+            comfort
+          }
+          onBuy={
+            onBuyBackground
+          }
+          formatNumber={
+            formatNumber
+          }
+          t={t}
+        />
+      )}
+
+    </div>
+  );
+}
+
+/* =====================================================
+   LOCALIZED UPGRADE DATA
+===================================================== */
+
+function getLocalizedUpgrade(
+  upgrade: Upgrade,
+  t: Translation
+): Upgrade {
+  const data: Record<
+    string,
+    {
+      name: string;
+      description: string;
+    }
+  > = {
+    box: {
+      name: t.boxName,
+      description:
+        t.boxDescription,
+    },
+
+    blanket: {
+      name: t.blanket1,
+      description:
+        t.blanket1Description,
+    },
+
+    blanket2: {
+      name: t.blanket2,
+      description:
+        t.blanket2Description,
+    },
+
+    blanket3: {
+      name: t.blanket3,
+      description:
+        t.blanket3Description,
+    },
+
+    blanket4: {
+      name: t.blanket4,
+      description:
+        t.blanket4Description,
+    },
+
+    bowl: {
+      name: t.bowl1,
+      description:
+        t.bowl1Description,
+    },
+
+    bowl2: {
+      name: t.bowl2,
+      description:
+        t.bowl2Description,
+    },
+
+    bowl3: {
+      name: t.bowl3,
+      description:
+        t.bowl3Description,
+    },
+
+    bowl4: {
+      name: t.bowl4,
+      description:
+        t.bowl4Description,
+    },
+
+    house1: {
+      name: t.house1,
+      description:
+        t.house1Description,
+    },
+
+    house2: {
+      name: t.house2,
+      description:
+        t.house2Description,
+    },
+
+    house3: {
+      name: t.house3,
+      description:
+        t.house3Description,
+    },
+
+    house4: {
+      name: t.house4,
+      description:
+        t.house4Description,
+    },
+
+    house5: {
+      name: t.house5,
+      description:
+        t.house5Description,
+    },
+
+    villa: {
+      name: t.villa,
+      description:
+        t.villaDescription,
+    },
+  };
+
+  const localized =
+    data[upgrade.id];
+
+  if (!localized) {
+    return upgrade;
+  }
+
+  return {
+    ...upgrade,
+    name:
+      localized.name,
+    description:
+      localized.description,
+  };
+}
+
+/* =====================================================
+   UPGRADE LIST
+===================================================== */
+
+function UpgradeList({
+  title,
+  items,
+  purchased,
+  comfort,
+  onBuy,
+  formatNumber,
+  t,
+}: {
+  title: string;
+  items: Upgrade[];
+  purchased: string[];
+  comfort: number;
+  onBuy: (
+    upgrade: Upgrade
+  ) => void;
+  formatNumber: (
+    value: number
+  ) => string;
+  t: Translation;
+}) {
+  return (
+    <>
+      <div className="list-title">
+
+        <span>
+          {title}
+        </span>
+
+        <b>
+          {
+            items.filter(
+              (item) =>
+                purchased.includes(
+                  item.id
+                )
+            ).length
+          }
+          /
+          {items.length}
+        </b>
+
+      </div>
+
+      <div className="upgrade-list">
+
+        {items.map(
+          (originalUpgrade) => {
+            const upgrade =
+              getLocalizedUpgrade(
+                originalUpgrade,
+                t
+              );
+
+            const owned =
+              purchased.includes(
+                upgrade.id
+              );
+
+            const affordable =
+              comfort >=
+              upgrade.cost;
+
+            return (
+              <article
+                className={`upgrade-card ${
+                  owned
+                    ? "owned"
+                    : ""
+                }`}
+                key={
+                  upgrade.id
+                }
+              >
+
+                <div className="upgrade-icon">
+                  {
+                    upgrade.icon
+                  }
+                </div>
+
+                <div className="upgrade-content">
+
+                  <div className="upgrade-heading">
+
+                    <h3>
+                      {
+                        upgrade.name
+                      }
+                    </h3>
+
+                    {owned && (
+                      <span className="owned-label">
+                        {t.scene}
+                      </span>
+                    )}
+
+                  </div>
+
+                  <p>
+                    {
+                      upgrade.description
+                    }
+                  </p>
+
+                  <div className="upgrade-bonus-row">
+
+                    <span className="upgrade-bonus">
+                      +
+                      {formatNumber(
+                        upgrade.tapBonus
+                      )}{" "}
+                      {t.perTapText}
+                    </span>
+
+                    <span className="passive-bonus">
+                      +
+                      {formatNumber(
+                        upgrade.passiveBonus
+                      )}
+                      {t.minuteText}
+                    </span>
+
+                  </div>
+
+                </div>
+
+                {owned ? (
+                  <div className="owned-check">
+                    ✓
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`buy-button ${
+                      !affordable
+                        ? "locked"
+                        : ""
+                    }`}
+                    disabled={
+                      !affordable
+                    }
+                    onClick={() =>
+                      onBuy(
+                        upgrade
+                      )
+                    }
+                  >
+                    🐾{" "}
+                    {formatNumber(
+                      upgrade.cost
+                    )}
+                  </button>
+                )}
+
+              </article>
+            );
+          }
+        )}
+
+      </div>
+    </>
+  );
+}
+
+/* =====================================================
+   LOCALIZED BACKGROUND
+===================================================== */
+
+function getLocalizedBackground(
+  background: Background,
+  t: Translation
+): Background {
+  const data: Record<
+    string,
+    {
+      name: string;
+      description: string;
+    }
+  > = {
+    "background-0": {
+      name: t.firstMeeting,
+      description:
+        t.firstMeetingDescription,
+    },
+
+    "background-1": {
+      name: t.warmEvening,
+      description:
+        t.warmEveningDescription,
+    },
+
+    "background-2": {
+      name: t.sunnyYard,
+      description:
+        t.sunnyYardDescription,
+    },
+
+    "background-3": {
+      name: t.greenGarden,
+      description:
+        t.greenGardenDescription,
+    },
+
+    "background-4": {
+      name: t.nightYard,
+      description:
+        t.nightYardDescription,
+    },
+
+    "background-5": {
+      name: t.autumnPark,
+      description:
+        t.autumnParkDescription,
+    },
+
+    "background-6": {
+      name: t.winterCozy,
+      description:
+        t.winterCozyDescription,
+    },
+
+    "background-7": {
+      name: t.premiumYard,
+      description:
+        t.premiumYardDescription,
+    },
+
+    "background-8": {
+      name: t.bigGarden,
+      description:
+        t.bigGardenDescription,
+    },
+
+    "background-9": {
+      name: t.catParadise,
+      description:
+        t.catParadiseDescription,
+    },
+  };
+
+  const localized =
+    data[background.id];
+
+  if (!localized) {
+    return background;
+  }
+
+  return {
+    ...background,
+    name:
+      localized.name,
+    description:
+      localized.description,
+  };
+}
+
+/* =====================================================
+   BACKGROUND LIST
+===================================================== */
+
+function BackgroundList({
+  backgrounds,
+  purchasedBackgrounds,
+  selectedBackground,
+  comfort,
+  onBuy,
+  formatNumber,
+  t,
+}: {
+  backgrounds: Background[];
+  purchasedBackgrounds: string[];
+  selectedBackground: string;
+  comfort: number;
+  onBuy: (
+    background: Background
+  ) => void;
+  formatNumber: (
+    value: number
+  ) => string;
+  t: Translation;
+}) {
+  return (
+    <>
+      <div className="list-title">
+
+        <span>
+          {
+            t.atmosphereUpper
+          }
+        </span>
+
+        <b>
+          {
+            purchasedBackgrounds.length
+          }
+          /
+          {backgrounds.length}
+        </b>
+
+      </div>
+
+      <div className="background-grid">
+
+        {backgrounds.map(
+          (originalBackground) => {
+            const background =
+              getLocalizedBackground(
+                originalBackground,
+                t
+              );
+
+            const owned =
+              purchasedBackgrounds.includes(
+                background.id
+              );
+
+            const selected =
+              selectedBackground ===
+              background.id;
+
+            const affordable =
+              comfort >=
+              background.cost;
+
+            return (
+              <article
+                className={`background-card ${
+                  selected
+                    ? "selected"
+                    : ""
+                }`}
+                key={
+                  background.id
+                }
+              >
+
+                <div className="background-preview">
+
+                  <img
+                    src={
+                      background.image
+                    }
+                    alt=""
+                    draggable="false"
+                    onError={(event) => {
+                      event.currentTarget.style.display =
+                        "none";
+                    }}
+                  />
+
+                  <div className="background-preview-overlay" />
+
+                  {selected && (
+                    <span className="background-selected">
+                      {t.selected}
+                    </span>
+                  )}
+
+                </div>
+
+                <div className="background-info">
+
+                  <div>
+
+                    <h3>
+                      {
+                        background.name
+                      }
+                    </h3>
+
+                    <p>
+                      {
+                        background.description
+                      }
+                    </p>
+
+                  </div>
+
+                  {owned ? (
+                    <button
+                      type="button"
+                      className={`background-action ${
+                        selected
+                          ? "current"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onBuy(
+                          background
+                        )
+                      }
+                    >
+                      {selected
+                        ? t.using
+                        : t.choose}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="background-action"
+                      disabled={
+                        !affordable
+                      }
+                      onClick={() =>
+                        onBuy(
+                          background
+                        )
+                      }
+                    >
+                      {background.cost ===
+                      0
+                        ? t.free
+                        : `🐾 ${formatNumber(
+                            background.cost
+                          )}`}
+                    </button>
+                  )}
+
+                </div>
+
+              </article>
+            );
+          }
+        )}
+
+      </div>
+
+      <div className="background-note">
+
+        {t.backgroundNote}
+
+      </div>
+    </>
+  );
+}
+
+/* =====================================================
+   TASKS
+===================================================== */
+
+function TasksScreen({
+  t,
+  dailyAvailable,
+  onlineProgress,
+  onlineSeconds,
+  onlineClaimed,
+  petProgress,
+  petCount,
+  petClaimed,
+  claimedTasks,
+  onClaimDaily,
+  onClaimOnline,
+  onClaimPet,
+  formatTime,
+}: {
+  t: Translation;
+  dailyAvailable: boolean;
+  onlineProgress: number;
+  onlineSeconds: number;
+  onlineClaimed: boolean;
+  petProgress: number;
+  petCount: number;
+  petClaimed: boolean;
+  claimedTasks: number;
+  onClaimDaily: () => void;
+  onClaimOnline: () => void;
+  onClaimPet: () => void;
+  formatTime: (
+    seconds: number
+  ) => string;
+}) {
+  return (
+    <div className="page">
+
+      <PageHeader
+        eyebrow={
+          t.rewards
+        }
+        title={
+          t.tasks
+        }
+        subtitle={
+          t.tasksSubtitle
+        }
+        badge={`${claimedTasks}/2`}
+      />
+
+      <section className="daily-bonus">
+
+        <div className="daily-icon">
+          🎁
+        </div>
+
+        <div className="daily-content">
+
+          <span>
+            {t.dailyBonus}
+          </span>
+
+          <h3>
+            {t.everyDay}
+          </h3>
+
+          <p>
+            {
+              t.dailyDescription
+            }
+          </p>
+
+        </div>
+
+        <div className="daily-action">
+
+          <strong>
+            +{DAILY_REWARD}
+          </strong>
+
+          {dailyAvailable ? (
+            <button
+              type="button"
+              onClick={
+                onClaimDaily
+              }
+            >
+              {t.claim}
+            </button>
+          ) : (
+            <span className="claimed-text">
+              {t.received}
+            </span>
+          )}
+
+        </div>
+
+      </section>
+
+      <div className="list-title task-list-title">
+
+        <span>
+          {t.activeTasks}
+        </span>
+
+      </div>
+
+      <TaskCard
+        t={t}
+        icon="⏱"
+        title={
+          t.onlineTask
+        }
+        description={
+          t.onlineDescription
+        }
+        progress={
+          onlineProgress
+        }
+        progressText={`${formatTime(
+          onlineSeconds
+        )} / 10:00`}
+        reward={
+          ONLINE_REWARD
+        }
+        completed={
+          onlineClaimed
+        }
+        available={
+          onlineSeconds >=
+          ONLINE_GOAL
+        }
+        onClaim={
+          onClaimOnline
+        }
+      />
+
+      <TaskCard
+        t={t}
+        icon="🐾"
+        title={
+          t.petTask
+        }
+        description={
+          t.petDescription
+        }
+        progress={
+          petProgress
+        }
+        progressText={
+          petClaimed
+            ? t.taskCompleted
+            : `${petCount} / ${PET_GOAL}`
+        }
+        reward={
+          PET_REWARD
+        }
+        completed={
+          petClaimed
+        }
+        available={
+          petCount >=
+            PET_GOAL &&
+          !petClaimed
+        }
+        onClaim={
+          onClaimPet
+        }
+      />
+
+      {petClaimed && (
+        <div
+          style={{
+            marginTop:
+              "10px",
+            padding:
+              "14px 16px",
+            borderRadius:
+              "16px",
+            background:
+              "rgba(255,255,255,0.06)",
+            border:
+              "1px solid rgba(255,255,255,0.08)",
+            textAlign:
+              "center",
+          }}
+        >
+
+          <div
+            style={{
+              fontSize:
+                "13px",
+              opacity:
+                0.65,
+              marginBottom:
+                "5px",
+            }}
+          >
+            {
+              t.nextTask
+            }
+          </div>
+
+          <div
+            style={{
+              fontSize:
+                "20px",
+              fontWeight:
+                800,
+            }}
+          >
+            48:00:00
+          </div>
+
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+/* =====================================================
+   FRIENDS
+===================================================== */
+
+type FriendProfile = {
+  id: string;
+  username: string | null;
+  pet_name: string;
+  comfort: number;
+  level: number;
+};
+
+type FriendRequestRow = {
+  id: number;
+  sender_id: string;
+  receiver_id: string;
+  status: "pending" | "accepted" | "declined";
+  created_at: string;
+};
+
+type FriendshipRow = {
+  id: number;
+  user_id: string;
+  friend_id: string;
+  created_at: string;
+};
+
+const FRIEND_TEXT = {
+  ru: {
+    subtitle: "Находи игроков TrustyPaws и заботьтесь о питомцах вместе",
+    yourId: "ТВОЙ ID ИГРОКА",
+    copy: "Копировать",
+    copied: "Скопировано",
+    searchTitle: "НАЙТИ ИГРОКА",
+    searchPlaceholder: "Например: TP-34AE8BCA",
+    search: "Найти",
+    searching: "Поиск...",
+    add: "Добавить",
+    requestSent: "Заявка отправлена",
+    alreadyFriend: "Уже в друзьях",
+    incoming: "ВХОДЯЩИЕ ЗАЯВКИ",
+    noIncoming: "Новых заявок пока нет",
+    accept: "Принять",
+    decline: "Отклонить",
+    myFriends: "МОИ ДРУЗЬЯ",
+    noFriends: "У тебя пока нет друзей. Найди игрока по его ID выше.",
+    remove: "Удалить",
+    comfort: "Уют",
+    level: "Уровень",
+    pet: "Питомец",
+    unknownPet: "Без имени",
+    notFound: "Игрок с таким ID не найден",
+    ownId: "Это твой собственный ID 🙂",
+    loadError: "Не удалось загрузить друзей",
+    actionError: "Не удалось выполнить действие",
+    pending: "Заявка уже отправлена",
+    incomingExists: "Этот игрок уже отправил тебе заявку — прими её ниже",
+    connection: "Подключение к серверу...",
+  },
+  en: {
+    subtitle: "Find TrustyPaws players and take care of your pets together",
+    yourId: "YOUR PLAYER ID",
+    copy: "Copy",
+    copied: "Copied",
+    searchTitle: "FIND PLAYER",
+    searchPlaceholder: "Example: TP-34AE8BCA",
+    search: "Search",
+    searching: "Searching...",
+    add: "Add friend",
+    requestSent: "Request sent",
+    alreadyFriend: "Already friends",
+    incoming: "INCOMING REQUESTS",
+    noIncoming: "No new requests yet",
+    accept: "Accept",
+    decline: "Decline",
+    myFriends: "MY FRIENDS",
+    noFriends: "You don't have friends yet. Find a player by ID above.",
+    remove: "Remove",
+    comfort: "Comfort",
+    level: "Level",
+    pet: "Pet",
+    unknownPet: "Unnamed",
+    notFound: "Player with this ID was not found",
+    ownId: "That's your own ID 🙂",
+    loadError: "Couldn't load friends",
+    actionError: "Couldn't complete the action",
+    pending: "Request already sent",
+    incomingExists: "This player already sent you a request — accept it below",
+    connection: "Connecting to server...",
+  },
+  ua: {
+    subtitle: "Знаходь гравців TrustyPaws і піклуйтеся про улюбленців разом",
+    yourId: "ТВІЙ ID ГРАВЦЯ",
+    copy: "Копіювати",
+    copied: "Скопійовано",
+    searchTitle: "ЗНАЙТИ ГРАВЦЯ",
+    searchPlaceholder: "Наприклад: TP-34AE8BCA",
+    search: "Знайти",
+    searching: "Пошук...",
+    add: "Додати",
+    requestSent: "Заявку надіслано",
+    alreadyFriend: "Вже у друзях",
+    incoming: "ВХІДНІ ЗАЯВКИ",
+    noIncoming: "Нових заявок поки немає",
+    accept: "Прийняти",
+    decline: "Відхилити",
+    myFriends: "МОЇ ДРУЗІ",
+    noFriends: "У тебе поки немає друзів. Знайди гравця за його ID вище.",
+    remove: "Видалити",
+    comfort: "Затишок",
+    level: "Рівень",
+    pet: "Улюбленець",
+    unknownPet: "Без імені",
+    notFound: "Гравця з таким ID не знайдено",
+    ownId: "Це твій власний ID 🙂",
+    loadError: "Не вдалося завантажити друзів",
+    actionError: "Не вдалося виконати дію",
+    pending: "Заявку вже надіслано",
+    incomingExists: "Цей гравець уже надіслав тобі заявку — прийми її нижче",
+    connection: "Підключення до сервера...",
+  },
+} as const;
+
+function FriendsScreen({
+  t,
+  language,
+  userId,
+  supabaseReady,
+  formatNumber,
+}: {
+  t: Translation;
+  language: Language;
+  userId: string | null;
+  supabaseReady: boolean;
+  formatNumber: (value: number) => string;
+}) {
+  const ft = FRIEND_TEXT[language];
+
+  const [searchValue, setSearchValue] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResult, setSearchResult] = useState<FriendProfile | null>(null);
+  const [searchMessage, setSearchMessage] = useState("");
+  const [incomingRequests, setIncomingRequests] = useState<
+    Array<FriendRequestRow & { profile: FriendProfile | null }>
+  >([]);
+  const [friends, setFriends] = useState<
+    Array<FriendshipRow & { profile: FriendProfile | null }>
+  >([]);
+  const [friendRows, setFriendRows] = useState<FriendshipRow[]>([]);
+  const [requestRows, setRequestRows] = useState<FriendRequestRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [errorText, setErrorText] = useState("");
+
+  const playerCode = useMemo(() => {
+    if (!userId) return "TP-........";
+
+    return `TP-${userId
+      .replace(/-/g, "")
+      .slice(0, 8)
+      .toUpperCase()}`;
+  }, [userId]);
+
+  const loadFriendsData = async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setErrorText("");
+
+    try {
+      const [requestsResponse, friendshipsResponse] = await Promise.all([
+        supabase
+          .from("friend_requests")
+          .select("id,sender_id,receiver_id,status,created_at")
+          .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
+        supabase
+          .from("friendships")
+          .select("id,user_id,friend_id,created_at")
+          .or(`user_id.eq.${userId},friend_id.eq.${userId}`),
+      ]);
+
+      if (requestsResponse.error) throw requestsResponse.error;
+      if (friendshipsResponse.error) throw friendshipsResponse.error;
+
+      const requests = (requestsResponse.data ?? []) as FriendRequestRow[];
+      const friendshipList = (friendshipsResponse.data ?? []) as FriendshipRow[];
+
+      setRequestRows(requests);
+      setFriendRows(friendshipList);
+
+      const incoming = requests.filter(
+        (request) =>
+          request.receiver_id === userId && request.status === "pending"
+      );
+
+      const incomingSenderIds = incoming.map((request) => request.sender_id);
+      const friendIds = friendshipList.map((friendship) =>
+        friendship.user_id === userId
+          ? friendship.friend_id
+          : friendship.user_id
+      );
+
+      const profileIds = Array.from(
+        new Set([...incomingSenderIds, ...friendIds])
+      );
+
+      let profileMap = new Map<string, FriendProfile>();
+
+      if (profileIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id,username,pet_name,comfort,level")
+          .in("id", profileIds);
+
+        if (profilesError) throw profilesError;
+
+        profileMap = new Map(
+          ((profilesData ?? []) as FriendProfile[]).map((profile) => [
+            profile.id,
+            profile,
+          ])
+        );
+      }
+
+      setIncomingRequests(
+        incoming.map((request) => ({
+          ...request,
+          profile: profileMap.get(request.sender_id) ?? null,
+        }))
+      );
+
+      setFriends(
+        friendshipList.map((friendship) => {
+          const friendId =
+            friendship.user_id === userId
+              ? friendship.friend_id
+              : friendship.user_id;
+
+          return {
+            ...friendship,
+            profile: profileMap.get(friendId) ?? null,
+          };
+        })
+      );
+    } catch (error) {
+      console.error("TrustyPaws friends loading error:", error);
+      setErrorText(ft.loadError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!supabaseReady || !userId) return;
+
+    void loadFriendsData();
+  }, [supabaseReady, userId]);
+
+  const copyPlayerCode = async () => {
+    try {
+      await navigator.clipboard.writeText(playerCode);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1300);
+    } catch {
+      setSearchMessage(playerCode);
+    }
+  };
+
+  const searchPlayer = async () => {
+    if (!userId || searching) return;
+
+    const cleanCode = searchValue.trim().toUpperCase();
+
+    setSearchResult(null);
+    setSearchMessage("");
+
+    if (!cleanCode) return;
+
+    if (cleanCode === playerCode) {
+      setSearchMessage(ft.ownId);
+      return;
+    }
+
+    setSearching(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,username,pet_name,comfort,level")
+        .eq("username", cleanCode)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        setSearchMessage(ft.notFound);
+        return;
+      }
+
+      setSearchResult(data as FriendProfile);
+    } catch (error) {
+      console.error("TrustyPaws player search error:", error);
+      setSearchMessage(ft.actionError);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const relationFor = (targetId: string) => {
+    const isFriend = friendRows.some(
+      (row) =>
+        (row.user_id === userId && row.friend_id === targetId) ||
+        (row.user_id === targetId && row.friend_id === userId)
+    );
+
+    if (isFriend) return "friend" as const;
+
+    const outgoing = requestRows.some(
+      (row) =>
+        row.sender_id === userId &&
+        row.receiver_id === targetId &&
+        row.status === "pending"
+    );
+
+    if (outgoing) return "outgoing" as const;
+
+    const incoming = requestRows.some(
+      (row) =>
+        row.sender_id === targetId &&
+        row.receiver_id === userId &&
+        row.status === "pending"
+    );
+
+    if (incoming) return "incoming" as const;
+
+    return "none" as const;
+  };
+
+  const sendFriendRequest = async (profile: FriendProfile) => {
+    if (!userId || busyId) return;
+
+    const relation = relationFor(profile.id);
+
+    if (relation === "friend") {
+      setSearchMessage(ft.alreadyFriend);
+      return;
+    }
+
+    if (relation === "outgoing") {
+      setSearchMessage(ft.pending);
+      return;
+    }
+
+    if (relation === "incoming") {
+      setSearchMessage(ft.incomingExists);
+      return;
+    }
+
+    setBusyId(profile.id);
+    setSearchMessage("");
+
+    try {
+      // Старую отклонённую заявку удаляем, чтобы игрок мог отправить новую.
+      const { error: deleteError } = await supabase
+        .from("friend_requests")
+        .delete()
+        .or(
+          `and(sender_id.eq.${userId},receiver_id.eq.${profile.id}),and(sender_id.eq.${profile.id},receiver_id.eq.${userId})`
+        )
+        .in("status", ["declined", "accepted"]);
+
+      if (deleteError) throw deleteError;
+
+      const { error } = await supabase.from("friend_requests").insert({
+        sender_id: userId,
+        receiver_id: profile.id,
+        status: "pending",
+      });
+
+      if (error) throw error;
+
+      setSearchMessage(ft.requestSent);
+      await loadFriendsData();
+    } catch (error) {
+      console.error("TrustyPaws friend request error:", error);
+      setSearchMessage(ft.actionError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const acceptRequest = async (request: FriendRequestRow) => {
+    if (!userId || busyId) return;
+
+    setBusyId(request.sender_id);
+    setErrorText("");
+
+    try {
+      const { error: updateError } = await supabase
+        .from("friend_requests")
+        .update({ status: "accepted" })
+        .eq("id", request.id);
+
+      if (updateError) throw updateError;
+
+      const { error: friendshipError } = await supabase
+        .from("friendships")
+        .upsert(
+          {
+            user_id: userId,
+            friend_id: request.sender_id,
+          },
+          {
+            onConflict: "user_id,friend_id",
+            ignoreDuplicates: true,
+          }
+        );
+
+      if (friendshipError) throw friendshipError;
+
+      await loadFriendsData();
+    } catch (error) {
+      console.error("TrustyPaws accept friend error:", error);
+      setErrorText(ft.actionError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const declineRequest = async (request: FriendRequestRow) => {
+    if (busyId) return;
+
+    setBusyId(request.sender_id);
+    setErrorText("");
+
+    try {
+      const { error } = await supabase
+        .from("friend_requests")
+        .update({ status: "declined" })
+        .eq("id", request.id);
+
+      if (error) throw error;
+
+      await loadFriendsData();
+    } catch (error) {
+      console.error("TrustyPaws decline friend error:", error);
+      setErrorText(ft.actionError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeFriend = async (friendship: FriendshipRow) => {
+    if (!userId || busyId) return;
+
+    const friendId =
+      friendship.user_id === userId
+        ? friendship.friend_id
+        : friendship.user_id;
+
+    setBusyId(friendId);
+    setErrorText("");
+
+    try {
+      const { error: friendshipError } = await supabase
+        .from("friendships")
+        .delete()
+        .eq("id", friendship.id);
+
+      if (friendshipError) throw friendshipError;
+
+      const { error: requestError } = await supabase
+        .from("friend_requests")
+        .delete()
+        .or(
+          `and(sender_id.eq.${userId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${userId})`
+        );
+
+      if (requestError) throw requestError;
+
+      await loadFriendsData();
+    } catch (error) {
+      console.error("TrustyPaws remove friend error:", error);
+      setErrorText(ft.actionError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (!supabaseReady || !userId) {
+    return (
+      <div className="page">
+        <PageHeader
+          eyebrow={t.community}
+          title={t.friendsTitle}
+          subtitle={ft.subtitle}
+        />
+
+        <section className="friends-loading-card">
+          <div className="friends-loading-paw">🐾</div>
+          <strong>{ft.connection}</strong>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page friends-page">
+      <PageHeader
+        eyebrow={t.community}
+        title={t.friendsTitle}
+        subtitle={ft.subtitle}
+        badge={`${friends.length}`}
+      />
+
+      <section className="player-id-card">
+        <div className="player-id-icon">🐾</div>
+
+        <div className="player-id-main">
+          <span>{ft.yourId}</span>
+          <strong>{playerCode}</strong>
+        </div>
+
+        <button
+          type="button"
+          className={`copy-player-id ${copied ? "copied" : ""}`}
+          onClick={copyPlayerCode}
+        >
+          {copied ? `✓ ${ft.copied}` : `⧉ ${ft.copy}`}
+        </button>
+      </section>
+
+      <section className="friend-search-card">
+        <div className="friend-section-heading">
+          <span>🔎</span>
+          <strong>{ft.searchTitle}</strong>
+        </div>
+
+        <div className="friend-search-row">
+          <input
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value.toUpperCase())}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void searchPlayer();
+            }}
+            placeholder={ft.searchPlaceholder}
+            maxLength={11}
+          />
+
+          <button
+            type="button"
+            onClick={() => void searchPlayer()}
+            disabled={searching || !searchValue.trim()}
+          >
+            {searching ? ft.searching : ft.search}
+          </button>
+        </div>
+
+        {searchMessage && (
+          <div className="friend-search-message">{searchMessage}</div>
+        )}
+
+        {searchResult && (
+          <FriendProfileCard
+            profile={searchResult}
+            formatNumber={formatNumber}
+            comfortLabel={ft.comfort}
+            levelLabel={ft.level}
+            petLabel={ft.pet}
+            unknownPet={ft.unknownPet}
+            action={
+              relationFor(searchResult.id) === "friend"
+                ? ft.alreadyFriend
+                : relationFor(searchResult.id) === "outgoing"
+                ? ft.pending
+                : relationFor(searchResult.id) === "incoming"
+                ? ft.incomingExists
+                : ft.add
+            }
+            actionDisabled={
+              relationFor(searchResult.id) !== "none" ||
+              busyId === searchResult.id
+            }
+            onAction={() => void sendFriendRequest(searchResult)}
+          />
+        )}
+      </section>
+
+      {errorText && <div className="friends-error">⚠️ {errorText}</div>}
+
+      <div className="friend-list-heading">
+        <span>{ft.incoming}</span>
+        <b>{incomingRequests.length}</b>
+      </div>
+
+      <div className="friend-request-list">
+        {loading ? (
+          <FriendSkeleton />
+        ) : incomingRequests.length === 0 ? (
+          <div className="friends-empty-mini">📨 {ft.noIncoming}</div>
+        ) : (
+          incomingRequests.map((request) => (
+            <article className="friend-request-card" key={request.id}>
+              <FriendAvatar name={request.profile?.pet_name || request.profile?.username || "?"} />
+
+              <div className="friend-request-info">
+                <strong>{request.profile?.username ?? "TrustyPaws"}</strong>
+                <span>
+                  🐱 {request.profile?.pet_name || ft.unknownPet} · {ft.level} {request.profile?.level ?? 1}
+                </span>
+              </div>
+
+              <div className="friend-request-actions">
+                <button
+                  type="button"
+                  className="friend-accept"
+                  disabled={busyId === request.sender_id}
+                  onClick={() => void acceptRequest(request)}
+                >
+                  ✓ {ft.accept}
+                </button>
+
+                <button
+                  type="button"
+                  className="friend-decline"
+                  disabled={busyId === request.sender_id}
+                  onClick={() => void declineRequest(request)}
+                >
+                  × {ft.decline}
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="friend-list-heading friends-own-heading">
+        <span>{ft.myFriends}</span>
+        <b>{friends.length}</b>
+      </div>
+
+      <div className="friends-list">
+        {loading ? (
+          <FriendSkeleton />
+        ) : friends.length === 0 ? (
+          <div className="friends-empty-list">
+            <div>👥</div>
+            <strong>{ft.myFriends}</strong>
+            <p>{ft.noFriends}</p>
+          </div>
+        ) : (
+          friends.map((friendship) => {
+            const profile = friendship.profile;
+            const friendId =
+              friendship.user_id === userId
+                ? friendship.friend_id
+                : friendship.user_id;
+
+            return (
+              <article className="friend-card" key={friendship.id}>
+                <FriendAvatar name={profile?.pet_name || profile?.username || "?"} />
+
+                <div className="friend-card-main">
+                  <div className="friend-card-top">
+                    <div>
+                      <strong>{profile?.username ?? "TrustyPaws"}</strong>
+                      <span>🐱 {profile?.pet_name || ft.unknownPet}</span>
+                    </div>
+
+                    <span className="friend-level">LVL {profile?.level ?? 1}</span>
+                  </div>
+
+                  <div className="friend-comfort">
+                    <span>🐾 {ft.comfort}</span>
+                    <strong>{formatNumber(profile?.comfort ?? 0)}</strong>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="remove-friend-button"
+                  disabled={busyId === friendId}
+                  onClick={() => void removeFriend(friendship)}
+                  title={ft.remove}
+                >
+                  ×
+                </button>
+              </article>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FriendAvatar({ name }: { name: string }) {
+  const letter = name.trim().charAt(0).toUpperCase() || "🐾";
+
+  return <div className="friend-avatar">{letter}</div>;
+}
+
+function FriendProfileCard({
+  profile,
+  formatNumber,
+  comfortLabel,
+  levelLabel,
+  petLabel,
+  unknownPet,
+  action,
+  actionDisabled,
+  onAction,
+}: {
+  profile: FriendProfile;
+  formatNumber: (value: number) => string;
+  comfortLabel: string;
+  levelLabel: string;
+  petLabel: string;
+  unknownPet: string;
+  action: string;
+  actionDisabled: boolean;
+  onAction: () => void;
+}) {
+  return (
+    <article className="friend-search-result">
+      <FriendAvatar name={profile.pet_name || profile.username || "?"} />
+
+      <div className="friend-search-result-main">
+        <strong>{profile.username ?? "TrustyPaws"}</strong>
+        <span>🐱 {petLabel}: {profile.pet_name || unknownPet}</span>
+        <small>
+          {levelLabel} {profile.level} · 🐾 {comfortLabel}: {formatNumber(profile.comfort)}
+        </small>
+      </div>
+
+      <button
+        type="button"
+        disabled={actionDisabled}
+        onClick={onAction}
+      >
+        {action}
+      </button>
+    </article>
+  );
+}
+
+function FriendSkeleton() {
+  return (
+    <div className="friend-skeleton">
+      <span />
+      <div>
+        <i />
+        <i />
+      </div>
+    </div>
+  );
+}
+
+/* =====================================================
+   SHOP
+===================================================== */
+
+function ShopScreen({
+  t,
+}: {
+  t: Translation;
+}) {
+  return (
+    <div className="page">
+
+      <PageHeader
+        eyebrow={
+          t.trustyPaws
+        }
+        title={
+          t.shopTitle
+        }
+        subtitle={
+          t.shopSubtitle
+        }
+      />
+
+      <section className="shop-coming">
+
+        <div className="shop-icon">
+          🛍️
+        </div>
+
+        <div className="coming-badge">
+          {t.soon}
+        </div>
+
+        <h2>
+          {t.shopComing}
+        </h2>
+
+        <p>
+          {
+            t.shopDescription
+          }
+        </p>
+
+        <div className="shop-preview">
+          <span>
+            🎨
+          </span>
+
+          <span>
+            🧸
+          </span>
+
+          <span>
+            👑
+          </span>
+
+          <span>
+            ✨
+          </span>
+        </div>
+
+      </section>
+
+    </div>
+  );
+}
+
+/* =====================================================
+   PAGE HEADER
+===================================================== */
+
+function PageHeader({
+  eyebrow,
+  title,
+  subtitle,
+  badge,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  badge?: string;
+}) {
+  return (
+    <header className="page-header">
+
+      <div>
+
+        <span className="eyebrow">
+          {eyebrow}
+        </span>
+
+        <h1>
+          {title}
+        </h1>
+
+        <p>
+          {subtitle}
+        </p>
+
+      </div>
+
+      {badge && (
+        <div className="header-badge">
+          {badge}
+        </div>
+      )}
+
+    </header>
+  );
+}
+
+/* =====================================================
+   STAT
+===================================================== */
+
+function Stat({
+  icon,
+  value,
+  label,
+}: {
+  icon: string;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="stat-card">
+
+      <div className="stat-icon">
+        {icon}
+      </div>
+
+      <div>
+
+        <strong>
+          {value}
+        </strong>
+
+        <span>
+          {label}
+        </span>
+
+      </div>
+
+    </div>
+  );
+}
+
+/* =====================================================
+   TASK CARD
+===================================================== */
+
+function TaskCard({
+  t,
+  icon,
+  title,
+  description,
+  progress,
+  progressText,
+  reward,
+  completed,
+  available,
+  onClaim,
+}: {
+  t: Translation;
+  icon: string;
+  title: string;
+  description: string;
+  progress: number;
+  progressText: string;
+  reward: number;
+  completed: boolean;
+  available: boolean;
+  onClaim: () => void;
+}) {
+  return (
+    <article
+      className={`task-card ${
+        completed
+          ? "completed-card"
+          : ""
+      }`}
+    >
+
+      <div className="task-icon">
+        {icon}
+      </div>
+
+      <div className="task-main">
+
+        <div className="task-title-row">
+
+          <h3>
+            {title}
+          </h3>
+
+          <span className="task-reward">
+            +{reward} 🐾
+          </span>
+
+        </div>
+
+        <p>
+          {description}
+        </p>
+
+        <div className="progress-info">
+
+          <div className="progress-track">
+
+            <div
+              className="progress-fill"
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.max(
+                    0,
+                    progress
+                  )
+                )}%`,
+              }}
+            />
+
+          </div>
+
+          <span>
+            {progressText}
+          </span>
+
+        </div>
+
+      </div>
+
+      <div className="task-action">
+
+        {completed ? (
+          <div className="task-completed">
+            ✓
+          </div>
+        ) : available ? (
+          <button
+            type="button"
+            className="claim-button"
+            onClick={
+              onClaim
+            }
+          >
+            {t.claim}
+          </button>
+        ) : (
+          <div className="task-waiting">
+            {t.taskInProgress}
+          </div>
+        )}
+
+      </div>
+
+    </article>
+  );
+}
+
+/* =====================================================
+   BOTTOM NAVIGATION
+===================================================== */
+
+function BottomNavigation({
+  t,
+  activeTab,
+  setActiveTab,
+  hasTaskReward,
+}: {
+  t: Translation;
+  activeTab: Tab;
+  setActiveTab: (
+    tab: Tab
+  ) => void;
+  hasTaskReward: boolean;
+}) {
+  const items: {
+    id: Tab;
+    icon: string;
+    label: string;
+  }[] = [
+    {
+      id: "home",
+      icon: "⌂",
+      label: t.home,
+    },
+    {
+      id: "upgrades",
+      icon: "✦",
+      label: t.upgrades,
+    },
+    {
+      id: "tasks",
+      icon: "✓",
+      label: t.tasks,
+    },
+    {
+      id: "friends",
+      icon: "♟",
+      label: t.friends,
+    },
+    {
+      id: "shop",
+      icon: "▣",
+      label: t.shop,
+    },
+  ];
+
+  return (
+    <nav className="bottom-nav">
+
+      <div className="bottom-nav-inner">
+
+        {items.map(
+          (item) => {
+            const active =
+              activeTab ===
+              item.id;
+
+            return (
+              <button
+                key={
+                  item.id
+                }
+                type="button"
+                className={`nav-item ${
+                  active
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() =>
+                  setActiveTab(
+                    item.id
+                  )
+                }
+              >
+
+                <span className="nav-icon-wrap">
+
+                  <span className="nav-icon">
+                    {
+                      item.icon
+                    }
+                  </span>
+
+                  {item.id ===
+                    "tasks" &&
+                    hasTaskReward && (
+                      <span className="nav-dot" />
+                    )}
+
+                </span>
+
+                <span className="nav-label">
+                  {
+                    item.label
+                  }
+                </span>
+
+              </button>
+            );
+          }
+        )}
+
+      </div>
+
+    </nav>
+  );
+}
+
+export default App;
