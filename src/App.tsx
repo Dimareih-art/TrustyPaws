@@ -58,6 +58,9 @@ const ONE_TIME_PET_1000_GOAL = 1000;
 const ONE_TIME_PET_1000_REWARD = 2500;
 
 const VIP_PRICE_STARS = 199;
+const VIP_TAP_BONUS = 20;
+const VIP_PASSIVE_PER_MINUTE = 22;
+const VIP_MAX_ENERGY = 200;
 
 const DAILY_RESET_AT_KEY = "trusty_daily_reset_at";
 const DAILY_PET_COUNT_KEY = "trusty_daily_pet_count";
@@ -1424,12 +1427,13 @@ const BACKGROUNDS: Background[] = [
 
 function calculateOfflineEnergy(
   storedEnergy: number,
-  storedTimestamp: number
+  storedTimestamp: number,
+  maxEnergy: number = MAX_ENERGY
 ) {
   const now = Date.now();
 
   const safeEnergy = Math.min(
-    MAX_ENERGY,
+    maxEnergy,
     Math.max(
       0,
       storedEnergy
@@ -1450,10 +1454,10 @@ function calculateOfflineEnergy(
   }
 
   if (
-    safeEnergy >= MAX_ENERGY
+    safeEnergy >= maxEnergy
   ) {
     return {
-      energy: MAX_ENERGY,
+      energy: maxEnergy,
       timestamp: now,
     };
   }
@@ -1471,13 +1475,13 @@ function calculateOfflineEnergy(
 
   const newEnergy =
     Math.min(
-      MAX_ENERGY,
+      maxEnergy,
       safeEnergy +
         recovered
     );
 
   const newTimestamp =
-    newEnergy >= MAX_ENERGY
+    newEnergy >= maxEnergy
       ? now
       : storedTimestamp +
         recovered *
@@ -1694,6 +1698,12 @@ function App() {
   const [resetModalOpen, setResetModalOpen] =
     useState(false);
 
+  const [vipActive, setVipActive] =
+    useState(false);
+
+  const [, setVipExpiresAt] =
+    useState<string | null>(null);
+
   /* ===================================================
      SUPABASE AUTH + PLAYER PROFILE
   =================================================== */
@@ -1819,6 +1829,60 @@ function App() {
   }, [supabaseAttempt]);
 
   /* ===================================================
+     VIP STATUS
+  =================================================== */
+
+  useEffect(() => {
+    if (!supabaseReady || !userId) {
+      setVipActive(false);
+      setVipExpiresAt(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadVipStatus = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_vip,vip_expires_at")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("TrustyPaws VIP status error:", error);
+        return;
+      }
+
+      if (cancelled) return;
+
+      const expiresAt = data?.vip_expires_at ?? null;
+      const active = Boolean(
+        data?.is_vip === true &&
+          expiresAt &&
+          new Date(expiresAt).getTime() > Date.now()
+      );
+
+      setVipActive(active);
+      setVipExpiresAt(expiresAt);
+    };
+
+    void loadVipStatus();
+
+    const timer = window.setInterval(() => {
+      void loadVipStatus();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [supabaseReady, userId]);
+
+  const maxEnergy = vipActive
+    ? VIP_MAX_ENERGY
+    : MAX_ENERGY;
+
+  /* ===================================================
      UPGRADES
   =================================================== */
 
@@ -1830,26 +1894,24 @@ function App() {
     []
   );
 
-  const passivePerMinute =
+  const housePassivePerMinute =
     useMemo(() => {
       const highestPurchasedHouse =
-        [
-          ...HOUSES,
-        ]
+        [...HOUSES]
           .reverse()
-          .find(
-            (house) =>
-              purchased.includes(
-                house.id
-              )
+          .find((house) =>
+            purchased.includes(house.id)
           );
 
       return (
-        highestPurchasedHouse
-          ?.passiveBonus ??
+        highestPurchasedHouse?.passiveBonus ??
         BASE_PASSIVE_PER_MINUTE
       );
     }, [purchased]);
+
+  const passivePerMinute =
+    housePassivePerMinute +
+    (vipActive ? VIP_PASSIVE_PER_MINUTE : 0);
 
   const upgradeBonus =
     useMemo(() => {
@@ -1880,7 +1942,8 @@ function App() {
 
   const tapReward =
     BASE_TAP_REWARD +
-    upgradeBonus;
+    upgradeBonus +
+    (vipActive ? VIP_TAP_BONUS : 0);
 
   /* ===================================================
      SUPABASE PROFILE SYNC
@@ -2161,7 +2224,8 @@ function App() {
         const result =
           calculateOfflineEnergy(
             storedEnergy,
-            storedTimestamp
+            storedTimestamp,
+            maxEnergy
           );
 
         if (
@@ -2190,7 +2254,7 @@ function App() {
       window.clearInterval(
         timer
       );
-  }, [energy]);
+  }, [energy, maxEnergy]);
 
   /* ===================================================
      ENERGY VISIBILITY
@@ -2216,7 +2280,8 @@ function App() {
       const result =
         calculateOfflineEnergy(
           storedEnergy,
-          storedTimestamp
+          storedTimestamp,
+          maxEnergy
         );
 
       setEnergy(
@@ -2267,7 +2332,13 @@ function App() {
         handleVisibility
       );
     };
-  }, [energy]);
+  }, [energy, maxEnergy]);
+
+  useEffect(() => {
+    setEnergy((current) =>
+      Math.min(current, maxEnergy)
+    );
+  }, [maxEnergy]);
 
   /* ===================================================
      PASSIVE INCOME
@@ -2396,7 +2467,7 @@ function App() {
 
     if (
       energy >=
-      MAX_ENERGY
+      maxEnergy
     ) {
       localStorage.setItem(
         ENERGY_TIMESTAMP_KEY,
@@ -2698,7 +2769,7 @@ function App() {
 
       setComfort(0);
       setEnergy(
-        MAX_ENERGY
+        maxEnergy
       );
       setPetCount(0);
 
@@ -3114,6 +3185,9 @@ const formatTime = (
               energy={
                 energy
               }
+              maxEnergy={
+                maxEnergy
+              }
               petCount={
                 petCount
               }
@@ -3236,6 +3310,10 @@ const formatTime = (
               supabaseReady={
                 supabaseReady
               }
+              onVipStatusChange={(active, expiresAt) => {
+                setVipActive(active);
+                setVipExpiresAt(expiresAt);
+              }}
             />
           )}
 
@@ -3530,6 +3608,7 @@ function HomeScreen({
   petName,
   comfort,
   energy,
+  maxEnergy,
   petCount,
   tapReward,
   passivePerMinute,
@@ -3545,6 +3624,7 @@ function HomeScreen({
   petName: string;
   comfort: number;
   energy: number;
+  maxEnergy: number;
   petCount: number;
   tapReward: number;
   passivePerMinute: number;
@@ -3564,7 +3644,7 @@ function HomeScreen({
       Math.max(
         0,
         (energy /
-          MAX_ENERGY) *
+          maxEnergy) *
           100
       )
     );
@@ -3917,7 +3997,7 @@ function HomeScreen({
 
                 <small>
                   {energy <
-                    MAX_ENERGY
+                    maxEnergy
                     ? t.everyTwoSeconds
                     : t.fullyRestored}
                 </small>
@@ -3928,7 +4008,7 @@ function HomeScreen({
 
             <strong className="energy-count">
               {energy}/
-              {MAX_ENERGY}
+              {maxEnergy}
             </strong>
 
           </div>
@@ -5959,11 +6039,13 @@ function ShopScreen({
   language,
   userId,
   supabaseReady,
+  onVipStatusChange,
 }: {
   t: Translation;
   language: Language;
   userId: string | null;
   supabaseReady: boolean;
+  onVipStatusChange: (active: boolean, expiresAt: string | null) => void;
 }) {
   const [vipLoading, setVipLoading] =
     useState(true);
@@ -5993,9 +6075,9 @@ function ShopScreen({
           expires: "Active until",
           renewNote:
             "When VIP expires, you decide whether to buy another 30 days. Stars are never charged automatically.",
-          feature1: "👑 VIP status in TrustyPaws",
-          feature2: "🗓️ Exactly 30 days from purchase",
-          feature3: "⭐ Manual renewal only",
+          feature1: "🐾 +20 Comfort for every tap",
+          feature2: "🏠 +22 passive Comfort per minute",
+          feature3: "⚡ Maximum energy increased to 200",
           loading: "Checking VIP status...",
           needTelegram:
             "Open TrustyPaws through the Telegram bot to pay with Stars.",
@@ -6024,9 +6106,9 @@ function ShopScreen({
           expires: "Активний до",
           renewNote:
             "Після завершення VIP ти сам вирішуєш, чи купувати ще 30 днів. Stars автоматично не списуються.",
-          feature1: "👑 VIP-статус у TrustyPaws",
-          feature2: "🗓️ Рівно 30 днів з моменту покупки",
-          feature3: "⭐ Лише ручне продовження",
+          feature1: "🐾 +20 Затишку за кожен тап",
+          feature2: "🏠 +22 пасивного Затишку за хвилину",
+          feature3: "⚡ Максимум енергії збільшено до 200",
           loading: "Перевіряємо VIP-статус...",
           needTelegram:
             "Відкрий TrustyPaws через Telegram-бота, щоб оплатити Stars.",
@@ -6055,9 +6137,9 @@ function ShopScreen({
           expires: "Активен до",
           renewNote:
             "После окончания VIP ты сам решаешь, покупать ли ещё 30 дней. Stars автоматически не списываются.",
-          feature1: "👑 VIP-статус в TrustyPaws",
-          feature2: "🗓️ Ровно 30 дней с момента покупки",
-          feature3: "⭐ Только ручное продление",
+          feature1: "🐾 +20 Комфорта за каждый тап",
+          feature2: "🏠 +22 пассивного Комфорта в минуту",
+          feature3: "⚡ Максимум энергии увеличен до 200",
           loading: "Проверяем VIP-статус...",
           needTelegram:
             "Открой TrustyPaws через Telegram-бота, чтобы оплатить Stars.",
@@ -6154,6 +6236,7 @@ function ShopScreen({
       setVipExpiresAt(
         expiresAt
       );
+      onVipStatusChange(active, expiresAt);
 
       return active;
     } catch (error) {
