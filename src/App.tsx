@@ -46,12 +46,24 @@ const ENERGY_REGEN_MS = 2000;
 const BASE_TAP_REWARD = 2;
 const BASE_PASSIVE_PER_MINUTE = 0;
 
-const ONLINE_GOAL = 10 * 60;
-const PET_GOAL = 200;
+const DAILY_RESET_MS = 24 * 60 * 60 * 1000;
 
 const DAILY_REWARD = 50;
-const ONLINE_REWARD = 100;
-const PET_REWARD = 150;
+const DAILY_PET_200_GOAL = 200;
+const DAILY_PET_200_REWARD = 150;
+const DAILY_PET_500_GOAL = 500;
+const DAILY_PET_500_REWARD = 300;
+
+const ONE_TIME_PET_1000_GOAL = 1000;
+const ONE_TIME_PET_1000_REWARD = 2500;
+
+const VIP_PRICE_STARS = 199;
+
+const DAILY_RESET_AT_KEY = "trusty_daily_reset_at";
+const DAILY_PET_COUNT_KEY = "trusty_daily_pet_count";
+const DAILY_PET_200_CLAIMED_KEY = "trusty_daily_pet_200_claimed";
+const DAILY_PET_500_CLAIMED_KEY = "trusty_daily_pet_500_claimed";
+const ONE_TIME_PET_1000_CLAIMED_KEY = "trusty_one_time_pet_1000_claimed";
 
 const ENERGY_STORAGE_KEY =
   "trusty_energy";
@@ -1103,7 +1115,7 @@ const ITEMS: Upgrade[] = [
     icon: "📦",
     description:
       "Сухое место, где котику можно спрятаться от дождя.",
-    cost: 50,
+    cost: 250,
     tapBonus: 1,
     passiveBonus: 0,
     sceneImage:
@@ -1117,7 +1129,7 @@ const ITEMS: Upgrade[] = [
     icon: "🧶",
     description:
       "Тёплый плед помогает котику согреться.",
-    cost: 100,
+    cost: 750,
     tapBonus: 1,
     passiveBonus: 0,
     sceneImage:
@@ -1131,7 +1143,7 @@ const ITEMS: Upgrade[] = [
     icon: "🧶",
     description:
       "Мягкий плед с другим дизайном.",
-    cost: 350,
+    cost: 2500,
     tapBonus: 2,
     passiveBonus: 0,
     sceneImage:
@@ -1145,7 +1157,7 @@ const ITEMS: Upgrade[] = [
     icon: "🧶",
     description:
       "Более уютный и красивый плед.",
-    cost: 1000,
+    cost: 7500,
     tapBonus: 3,
     passiveBonus: 0,
     sceneImage:
@@ -1159,7 +1171,7 @@ const ITEMS: Upgrade[] = [
     icon: "🧶",
     description:
       "Премиальный плед для настоящего уюта.",
-    cost: 3000,
+    cost: 20000,
     tapBonus: 5,
     passiveBonus: 0,
     sceneImage:
@@ -1173,7 +1185,7 @@ const ITEMS: Upgrade[] = [
     icon: "🥣",
     description:
       "Своя миска — ещё один шаг к нормальной жизни.",
-    cost: 250,
+    cost: 1500,
     tapBonus: 2,
     passiveBonus: 0,
     sceneImage:
@@ -1187,7 +1199,7 @@ const ITEMS: Upgrade[] = [
     icon: "🥣",
     description:
       "Удобная миска с более приятным дизайном.",
-    cost: 750,
+    cost: 5000,
     tapBonus: 3,
     passiveBonus: 0,
     sceneImage:
@@ -1201,7 +1213,7 @@ const ITEMS: Upgrade[] = [
     icon: "🥣",
     description:
       "Красивая миска для ухоженного питомца.",
-    cost: 2000,
+    cost: 15000,
     tapBonus: 5,
     passiveBonus: 0,
     sceneImage:
@@ -1215,7 +1227,7 @@ const ITEMS: Upgrade[] = [
     icon: "🥣",
     description:
       "Премиальная миска для счастливого котика.",
-    cost: 5000,
+    cost: 40000,
     tapBonus: 7,
     passiveBonus: 0,
     sceneImage:
@@ -1567,14 +1579,6 @@ function App() {
       )
     );
 
-  const [onlineSeconds, setOnlineSeconds] =
-    useState(() =>
-      getStoredNumber(
-        "trusty_online",
-        0
-      )
-    );
-
   const [purchased, setPurchased] =
     useState<string[]>(() =>
       getStoredArray(
@@ -1609,21 +1613,52 @@ function App() {
       )
     );
 
-  const [onlineClaimed, setOnlineClaimed] =
+  const [dailyPetCount, setDailyPetCount] =
+    useState(() =>
+      getStoredNumber(
+        DAILY_PET_COUNT_KEY,
+        0
+      )
+    );
+
+  const [dailyPet200Claimed, setDailyPet200Claimed] =
     useState(() =>
       getStoredBoolean(
-        "trusty_online_claimed",
+        DAILY_PET_200_CLAIMED_KEY,
         false
       )
     );
 
-  const [petClaimed, setPetClaimed] =
+  const [dailyPet500Claimed, setDailyPet500Claimed] =
     useState(() =>
       getStoredBoolean(
-        "trusty_pet_claimed",
+        DAILY_PET_500_CLAIMED_KEY,
         false
       )
     );
+
+  const [oneTimePet1000Claimed, setOneTimePet1000Claimed] =
+    useState(() =>
+      getStoredBoolean(
+        ONE_TIME_PET_1000_CLAIMED_KEY,
+        false
+      )
+    );
+
+  const [dailyResetAt, setDailyResetAt] =
+    useState(() => {
+      const stored = getStoredNumber(
+        DAILY_RESET_AT_KEY,
+        0
+      );
+
+      return stored > Date.now()
+        ? stored
+        : Date.now() + DAILY_RESET_MS;
+    });
+
+  const [taskNow, setTaskNow] =
+    useState(() => Date.now());
 
   const [petName, setPetName] =
     useState(() =>
@@ -1937,13 +1972,6 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(
-      "trusty_online",
-      String(onlineSeconds)
-    );
-  }, [onlineSeconds]);
-
-  useEffect(() => {
-    localStorage.setItem(
       "trusty_upgrades",
       JSON.stringify(purchased)
     );
@@ -1972,19 +2000,120 @@ function App() {
     );
   }, [dailyAvailable]);
 
-  useEffect(() => {
-    localStorage.setItem(
-      "trusty_online_claimed",
-      String(onlineClaimed)
-    );
-  }, [onlineClaimed]);
 
   useEffect(() => {
     localStorage.setItem(
-      "trusty_pet_claimed",
-      String(petClaimed)
+      DAILY_PET_COUNT_KEY,
+      String(dailyPetCount)
     );
-  }, [petClaimed]);
+  }, [dailyPetCount]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      DAILY_PET_200_CLAIMED_KEY,
+      String(dailyPet200Claimed)
+    );
+  }, [dailyPet200Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      DAILY_PET_500_CLAIMED_KEY,
+      String(dailyPet500Claimed)
+    );
+  }, [dailyPet500Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      ONE_TIME_PET_1000_CLAIMED_KEY,
+      String(oneTimePet1000Claimed)
+    );
+  }, [oneTimePet1000Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      DAILY_RESET_AT_KEY,
+      String(dailyResetAt)
+    );
+  }, [dailyResetAt]);
+
+  /* ===================================================
+     DAILY TASK RESET — ONE SHARED 24H TIMER
+  =================================================== */
+
+  useEffect(() => {
+    const resetDailyTasksIfNeeded = () => {
+      const now = Date.now();
+      setTaskNow(now);
+
+      if (now < dailyResetAt) {
+        return;
+      }
+
+      const nextResetAt = now + DAILY_RESET_MS;
+
+      setDailyAvailable(true);
+      setDailyPetCount(0);
+      setDailyPet200Claimed(false);
+      setDailyPet500Claimed(false);
+      setDailyResetAt(nextResetAt);
+
+      localStorage.setItem(
+        "trusty_daily_available",
+        "true"
+      );
+      localStorage.setItem(
+        DAILY_PET_COUNT_KEY,
+        "0"
+      );
+      localStorage.setItem(
+        DAILY_PET_200_CLAIMED_KEY,
+        "false"
+      );
+      localStorage.setItem(
+        DAILY_PET_500_CLAIMED_KEY,
+        "false"
+      );
+      localStorage.setItem(
+        DAILY_RESET_AT_KEY,
+        String(nextResetAt)
+      );
+    };
+
+    resetDailyTasksIfNeeded();
+
+    const timer = window.setInterval(
+      resetDailyTasksIfNeeded,
+      1000
+    );
+
+    const onVisibility = () => {
+      if (!document.hidden) {
+        resetDailyTasksIfNeeded();
+      }
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      onVisibility
+    );
+
+    window.addEventListener(
+      "focus",
+      resetDailyTasksIfNeeded
+    );
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener(
+        "visibilitychange",
+        onVisibility
+      );
+      window.removeEventListener(
+        "focus",
+        resetDailyTasksIfNeeded
+      );
+    };
+  }, [dailyResetAt]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -2252,35 +2381,6 @@ function App() {
   }, [passivePerMinute]);
 
   /* ===================================================
-     ONLINE TASK
-  =================================================== */
-
-  useEffect(() => {
-    if (
-      onlineSeconds >=
-      ONLINE_GOAL
-    ) {
-      return;
-    }
-
-    const timer =
-      window.setInterval(() => {
-        setOnlineSeconds(
-          (value) =>
-            Math.min(
-              ONLINE_GOAL,
-              value + 1
-            )
-        );
-      }, 1000);
-
-    return () =>
-      window.clearInterval(
-        timer
-      );
-  }, [onlineSeconds]);
-
-  /* ===================================================
      TAP
   =================================================== */
 
@@ -2318,11 +2418,11 @@ function App() {
     );
 
     setPetCount(
-      (value) =>
-        Math.min(
-          PET_GOAL,
-          value + 1
-        )
+      (value) => value + 1
+    );
+
+    setDailyPetCount(
+      (value) => value + 1
     );
 
     setRewardValue(
@@ -2528,61 +2628,59 @@ function App() {
   =================================================== */
 
   const claimDaily = () => {
-    if (
-      !dailyAvailable
-    ) {
+    if (!dailyAvailable) {
       return;
     }
 
     setComfort(
-      (value) =>
-        value +
-        DAILY_REWARD
+      (value) => value + DAILY_REWARD
     );
-
-    setDailyAvailable(
-      false
-    );
+    setDailyAvailable(false);
   };
 
-  const claimOnline = () => {
+  const claimDailyPet200 = () => {
     if (
-      onlineSeconds <
-        ONLINE_GOAL ||
-      onlineClaimed
+      dailyPetCount < DAILY_PET_200_GOAL ||
+      dailyPet200Claimed
     ) {
       return;
     }
 
     setComfort(
       (value) =>
-        value +
-        ONLINE_REWARD
+        value + DAILY_PET_200_REWARD
     );
-
-    setOnlineClaimed(
-      true
-    );
+    setDailyPet200Claimed(true);
   };
 
-  const claimPet = () => {
+  const claimDailyPet500 = () => {
     if (
-      petCount <
-        PET_GOAL ||
-      petClaimed
+      dailyPetCount < DAILY_PET_500_GOAL ||
+      dailyPet500Claimed
     ) {
       return;
     }
 
     setComfort(
       (value) =>
-        value +
-        PET_REWARD
+        value + DAILY_PET_500_REWARD
     );
+    setDailyPet500Claimed(true);
+  };
 
-    setPetClaimed(
-      true
+  const claimOneTimePet1000 = () => {
+    if (
+      petCount < ONE_TIME_PET_1000_GOAL ||
+      oneTimePet1000Claimed
+    ) {
+      return;
+    }
+
+    setComfort(
+      (value) =>
+        value + ONE_TIME_PET_1000_REWARD
     );
+    setOneTimePet1000Claimed(true);
   };
 
   /* ===================================================
@@ -2603,7 +2701,6 @@ function App() {
         MAX_ENERGY
       );
       setPetCount(0);
-      setOnlineSeconds(0);
 
       setPurchased([]);
 
@@ -2615,17 +2712,15 @@ function App() {
         "background-0"
       );
 
-      setDailyAvailable(
-        true
+      setDailyAvailable(true);
+      setDailyPetCount(0);
+      setDailyPet200Claimed(false);
+      setDailyPet500Claimed(false);
+      setOneTimePet1000Claimed(false);
+      setDailyResetAt(
+        now + DAILY_RESET_MS
       );
-
-      setOnlineClaimed(
-        false
-      );
-
-      setPetClaimed(
-        false
-      );
+      setTaskNow(now);
 
       setPetName("");
       setNameInput("");
@@ -2673,6 +2768,27 @@ function App() {
       );
 
       localStorage.setItem(
+        DAILY_RESET_AT_KEY,
+        String(now + DAILY_RESET_MS)
+      );
+      localStorage.setItem(
+        DAILY_PET_COUNT_KEY,
+        "0"
+      );
+      localStorage.setItem(
+        DAILY_PET_200_CLAIMED_KEY,
+        "false"
+      );
+      localStorage.setItem(
+        DAILY_PET_500_CLAIMED_KEY,
+        "false"
+      );
+      localStorage.setItem(
+        ONE_TIME_PET_1000_CLAIMED_KEY,
+        "false"
+      );
+
+      localStorage.setItem(
         "trusty_selected_background",
         "background-0"
       );
@@ -2707,37 +2823,46 @@ function App() {
     );
   };
 
-  const formatTime = (
-    seconds: number
-  ) => {
-    const safeSeconds =
-      Math.max(
-        0,
-        Math.floor(
-          seconds
-        )
-      );
+const formatTime = (
+  seconds: number
+) => {
+  const safeSeconds =
+    Math.max(
+      0,
+      Math.floor(seconds)
+    );
 
-    const minutes =
-      Math.floor(
-        safeSeconds / 60
-      );
+  const hours =
+    Math.floor(
+      safeSeconds / 3600
+    );
 
-    const sec =
-      safeSeconds % 60;
+  const minutes =
+    Math.floor(
+      (safeSeconds % 3600) /
+        60
+    );
 
-    return `${String(
-      minutes
-    ).padStart(
-      2,
-      "0"
-    )}:${String(
-      sec
-    ).padStart(
-      2,
-      "0"
-    )}`;
-  };
+  const sec =
+    safeSeconds % 60;
+
+  return `${String(
+    hours
+  ).padStart(
+    2,
+    "0"
+  )}:${String(
+    minutes
+  ).padStart(
+    2,
+    "0"
+  )}:${String(
+    sec
+  ).padStart(
+    2,
+    "0"
+  )}`;
+};
 
   /* ===================================================
      INTRO
@@ -2769,14 +2894,19 @@ function App() {
   const hasTaskReward =
     dailyAvailable ||
     (
-      onlineSeconds >=
-        ONLINE_GOAL &&
-      !onlineClaimed
+      dailyPetCount >=
+        DAILY_PET_200_GOAL &&
+      !dailyPet200Claimed
+    ) ||
+    (
+      dailyPetCount >=
+        DAILY_PET_500_GOAL &&
+      !dailyPet500Claimed
     ) ||
     (
       petCount >=
-        PET_GOAL &&
-      !petClaimed
+        ONE_TIME_PET_1000_GOAL &&
+      !oneTimePet1000Claimed
     );
 
   return (
@@ -3080,57 +3210,24 @@ function App() {
             "tasks" && (
             <TasksScreen
               t={t}
-              dailyAvailable={
-                dailyAvailable
-              }
-              onlineProgress={
-                Math.min(
-                  100,
-                  (onlineSeconds /
-                    ONLINE_GOAL) *
-                    100
+              language={language}
+              dailyAvailable={dailyAvailable}
+              dailyPetCount={dailyPetCount}
+              dailyPet200Claimed={dailyPet200Claimed}
+              dailyPet500Claimed={dailyPet500Claimed}
+              totalPetCount={petCount}
+              oneTimePet1000Claimed={oneTimePet1000Claimed}
+              secondsUntilReset={Math.max(
+                0,
+                Math.ceil(
+                  (dailyResetAt - taskNow) / 1000
                 )
-              }
-              onlineSeconds={
-                onlineSeconds
-              }
-              onlineClaimed={
-                onlineClaimed
-              }
-              petProgress={
-                Math.min(
-                  100,
-                  (petCount /
-                    PET_GOAL) *
-                    100
-                )
-              }
-              petCount={
-                petCount
-              }
-              petClaimed={
-                petClaimed
-              }
-              claimedTasks={
-                Number(
-                  onlineClaimed
-                ) +
-                Number(
-                  petClaimed
-                )
-              }
-              onClaimDaily={
-                claimDaily
-              }
-              onClaimOnline={
-                claimOnline
-              }
-              onClaimPet={
-                claimPet
-              }
-              formatTime={
-                formatTime
-              }
+              )}
+              onClaimDaily={claimDaily}
+              onClaimDailyPet200={claimDailyPet200}
+              onClaimDailyPet500={claimDailyPet500}
+              onClaimOneTimePet1000={claimOneTimePet1000}
+              formatTime={formatTime}
             />
           )}
 
@@ -3153,6 +3250,11 @@ function App() {
             "shop" && (
             <ShopScreen
               t={t}
+              language={language}
+              userId={userId}
+              supabaseReady={
+                supabaseReady
+              }
             />
           )}
 
@@ -3169,8 +3271,14 @@ function App() {
             setActiveTab
           }
           hasTaskReward={
-            hasTaskReward
-          }
+              dailyAvailable ||
+              (dailyPetCount >= DAILY_PET_200_GOAL &&
+                !dailyPet200Claimed) ||
+              (dailyPetCount >= DAILY_PET_500_GOAL &&
+                !dailyPet500Claimed) ||
+              (petCount >= ONE_TIME_PET_1000_GOAL &&
+                !oneTimePet1000Claimed)
+            }
         />
 
       </div>
@@ -4762,218 +4870,291 @@ function BackgroundList({
 
 function TasksScreen({
   t,
+  language,
   dailyAvailable,
-  onlineProgress,
-  onlineSeconds,
-  onlineClaimed,
-  petProgress,
-  petCount,
-  petClaimed,
-  claimedTasks,
+  dailyPetCount,
+  dailyPet200Claimed,
+  dailyPet500Claimed,
+  totalPetCount,
+  oneTimePet1000Claimed,
+  secondsUntilReset,
   onClaimDaily,
-  onClaimOnline,
-  onClaimPet,
+  onClaimDailyPet200,
+  onClaimDailyPet500,
+  onClaimOneTimePet1000,
   formatTime,
 }: {
   t: Translation;
+  language: Language;
   dailyAvailable: boolean;
-  onlineProgress: number;
-  onlineSeconds: number;
-  onlineClaimed: boolean;
-  petProgress: number;
-  petCount: number;
-  petClaimed: boolean;
-  claimedTasks: number;
+  dailyPetCount: number;
+  dailyPet200Claimed: boolean;
+  dailyPet500Claimed: boolean;
+  totalPetCount: number;
+  oneTimePet1000Claimed: boolean;
+  secondsUntilReset: number;
   onClaimDaily: () => void;
-  onClaimOnline: () => void;
-  onClaimPet: () => void;
-  formatTime: (
-    seconds: number
-  ) => string;
+  onClaimDailyPet200: () => void;
+  onClaimDailyPet500: () => void;
+  onClaimOneTimePet1000: () => void;
+  formatTime: (seconds: number) => string;
 }) {
+  const [taskSection, setTaskSection] =
+    useState<"daily" | "oneTime">("daily");
+
+  const text =
+    language === "en"
+      ? {
+          daily: "Daily",
+          oneTime: "One-time",
+          resetIn: "Daily tasks refresh in",
+          pet200: "Pet the kitty 200 times",
+          pet500: "Pet the kitty 500 times",
+          pet1000: "Pet the kitty 1000 times",
+          love: "Pet your kitty during the current daily cycle.",
+          milestone: "A permanent milestone. This task can only be claimed once.",
+        }
+      : language === "ua"
+      ? {
+          daily: "Щоденні",
+          oneTime: "Одноразові",
+          resetIn: "Щоденні завдання оновляться через",
+          pet200: "Погладь котика 200 разів",
+          pet500: "Погладь котика 500 разів",
+          pet1000: "Погладь котика 1000 разів",
+          love: "Гладь котика протягом поточного щоденного циклу.",
+          milestone: "Постійне досягнення. Нагороду можна забрати лише один раз.",
+        }
+      : {
+          daily: "Ежедневные",
+          oneTime: "Одноразовые",
+          resetIn: "Ежедневные задания обновятся через",
+          pet200: "Погладь котика 200 раз",
+          pet500: "Погладь котика 500 раз",
+          pet1000: "Погладь котика 1000 раз",
+          love: "Гладь котика в течение текущего ежедневного цикла.",
+          milestone: "Постоянное достижение. Награду можно забрать только один раз.",
+        };
+
+  const dailyClaimed =
+    Number(!dailyAvailable) +
+    Number(dailyPet200Claimed) +
+    Number(dailyPet500Claimed);
+
+  const oneTimeClaimed =
+    Number(oneTimePet1000Claimed);
+
   return (
     <div className="page">
-
       <PageHeader
-        eyebrow={
-          t.rewards
+        eyebrow={t.rewards}
+        title={t.tasks}
+        subtitle={t.tasksSubtitle}
+        badge={
+          taskSection === "daily"
+            ? `${dailyClaimed}/3`
+            : `${oneTimeClaimed}/1`
         }
-        title={
-          t.tasks
-        }
-        subtitle={
-          t.tasksSubtitle
-        }
-        badge={`${claimedTasks}/2`}
       />
 
-      <section className="daily-bonus">
+      <div
+        className="upgrade-tabs"
+        style={{ marginBottom: "14px" }}
+      >
+        <button
+          type="button"
+          className={
+            taskSection === "daily"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setTaskSection("daily")
+          }
+        >
+          {text.daily}
+        </button>
 
-        <div className="daily-icon">
-          🎁
-        </div>
-
-        <div className="daily-content">
-
-          <span>
-            {t.dailyBonus}
-          </span>
-
-          <h3>
-            {t.everyDay}
-          </h3>
-
-          <p>
-            {
-              t.dailyDescription
-            }
-          </p>
-
-        </div>
-
-        <div className="daily-action">
-
-          <strong>
-            +{DAILY_REWARD}
-          </strong>
-
-          {dailyAvailable ? (
-            <button
-              type="button"
-              onClick={
-                onClaimDaily
-              }
-            >
-              {t.claim}
-            </button>
-          ) : (
-            <span className="claimed-text">
-              {t.received}
-            </span>
-          )}
-
-        </div>
-
-      </section>
-
-      <div className="list-title task-list-title">
-
-        <span>
-          {t.activeTasks}
-        </span>
-
+        <button
+          type="button"
+          className={
+            taskSection === "oneTime"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setTaskSection("oneTime")
+          }
+        >
+          {text.oneTime}
+        </button>
       </div>
 
-      <TaskCard
-        t={t}
-        icon="⏱"
-        title={
-          t.onlineTask
-        }
-        description={
-          t.onlineDescription
-        }
-        progress={
-          onlineProgress
-        }
-        progressText={`${formatTime(
-          onlineSeconds
-        )} / 10:00`}
-        reward={
-          ONLINE_REWARD
-        }
-        completed={
-          onlineClaimed
-        }
-        available={
-          onlineSeconds >=
-          ONLINE_GOAL
-        }
-        onClaim={
-          onClaimOnline
-        }
-      />
-
-      <TaskCard
-        t={t}
-        icon="🐾"
-        title={
-          t.petTask
-        }
-        description={
-          t.petDescription
-        }
-        progress={
-          petProgress
-        }
-        progressText={
-          petClaimed
-            ? t.taskCompleted
-            : `${petCount} / ${PET_GOAL}`
-        }
-        reward={
-          PET_REWARD
-        }
-        completed={
-          petClaimed
-        }
-        available={
-          petCount >=
-            PET_GOAL &&
-          !petClaimed
-        }
-        onClaim={
-          onClaimPet
-        }
-      />
-
-      {petClaimed && (
-        <div
-          style={{
-            marginTop:
-              "10px",
-            padding:
-              "14px 16px",
-            borderRadius:
-              "16px",
-            background:
-              "rgba(255,255,255,0.06)",
-            border:
-              "1px solid rgba(255,255,255,0.08)",
-            textAlign:
-              "center",
-          }}
-        >
-
+      {taskSection === "daily" ? (
+        <>
           <div
             style={{
-              fontSize:
-                "13px",
-              opacity:
-                0.65,
-              marginBottom:
-                "5px",
+              marginBottom: "14px",
+              padding: "14px 16px",
+              borderRadius: "16px",
+              background:
+                "rgba(255,255,255,0.06)",
+              border:
+                "1px solid rgba(255,255,255,0.08)",
+              textAlign: "center",
             }}
           >
-            {
-              t.nextTask
+            <div
+              style={{
+                fontSize: "13px",
+                opacity: 0.68,
+                marginBottom: "5px",
+              }}
+            >
+              {text.resetIn}
+            </div>
+
+            <div
+              style={{
+                fontSize: "20px",
+                fontWeight: 800,
+              }}
+            >
+              {formatTime(secondsUntilReset)}
+            </div>
+          </div>
+
+          <section className="daily-bonus">
+            <div className="daily-icon">
+              🎁
+            </div>
+
+            <div className="daily-content">
+              <span>{t.dailyBonus}</span>
+              <h3>{t.everyDay}</h3>
+              <p>{t.dailyDescription}</p>
+            </div>
+
+            <div className="daily-action">
+              <strong>
+                +{DAILY_REWARD}
+              </strong>
+
+              {dailyAvailable ? (
+                <button
+                  type="button"
+                  onClick={onClaimDaily}
+                >
+                  {t.claim}
+                </button>
+              ) : (
+                <span className="claimed-text">
+                  {t.received}
+                </span>
+              )}
+            </div>
+          </section>
+
+          <div className="list-title task-list-title">
+            <span>{text.daily}</span>
+            <b>{dailyClaimed}/3</b>
+          </div>
+
+          <TaskCard
+            t={t}
+            icon="🐾"
+            title={text.pet200}
+            description={text.love}
+            progress={Math.min(
+              100,
+              (dailyPetCount /
+                DAILY_PET_200_GOAL) *
+                100
+            )}
+            progressText={
+              dailyPet200Claimed
+                ? t.taskCompleted
+                : `${Math.min(
+                    dailyPetCount,
+                    DAILY_PET_200_GOAL
+                  )} / ${DAILY_PET_200_GOAL}`
             }
+            reward={DAILY_PET_200_REWARD}
+            completed={dailyPet200Claimed}
+            available={
+              dailyPetCount >=
+                DAILY_PET_200_GOAL &&
+              !dailyPet200Claimed
+            }
+            onClaim={onClaimDailyPet200}
+          />
+
+          <TaskCard
+            t={t}
+            icon="🐾"
+            title={text.pet500}
+            description={text.love}
+            progress={Math.min(
+              100,
+              (dailyPetCount /
+                DAILY_PET_500_GOAL) *
+                100
+            )}
+            progressText={
+              dailyPet500Claimed
+                ? t.taskCompleted
+                : `${Math.min(
+                    dailyPetCount,
+                    DAILY_PET_500_GOAL
+                  )} / ${DAILY_PET_500_GOAL}`
+            }
+            reward={DAILY_PET_500_REWARD}
+            completed={dailyPet500Claimed}
+            available={
+              dailyPetCount >=
+                DAILY_PET_500_GOAL &&
+              !dailyPet500Claimed
+            }
+            onClaim={onClaimDailyPet500}
+          />
+        </>
+      ) : (
+        <>
+          <div className="list-title task-list-title">
+            <span>{text.oneTime}</span>
+            <b>{oneTimeClaimed}/1</b>
           </div>
 
-          <div
-            style={{
-              fontSize:
-                "20px",
-              fontWeight:
-                800,
-            }}
-          >
-            48:00:00
-          </div>
-
-        </div>
+          <TaskCard
+            t={t}
+            icon="🏆"
+            title={text.pet1000}
+            description={text.milestone}
+            progress={Math.min(
+              100,
+              (totalPetCount /
+                ONE_TIME_PET_1000_GOAL) *
+                100
+            )}
+            progressText={
+              oneTimePet1000Claimed
+                ? t.taskCompleted
+                : `${Math.min(
+                    totalPetCount,
+                    ONE_TIME_PET_1000_GOAL
+                  )} / ${ONE_TIME_PET_1000_GOAL}`
+            }
+            reward={ONE_TIME_PET_1000_REWARD}
+            completed={oneTimePet1000Claimed}
+            available={
+              totalPetCount >=
+                ONE_TIME_PET_1000_GOAL &&
+              !oneTimePet1000Claimed
+            }
+            onClaim={onClaimOneTimePet1000}
+          />
+        </>
       )}
-
     </div>
   );
 }
@@ -5794,12 +5975,424 @@ function FriendSkeleton() {
 
 function ShopScreen({
   t,
+  language,
+  userId,
+  supabaseReady,
 }: {
   t: Translation;
+  language: Language;
+  userId: string | null;
+  supabaseReady: boolean;
 }) {
+  const [vipLoading, setVipLoading] =
+    useState(true);
+
+  const [vipActive, setVipActive] =
+    useState(false);
+
+  const [vipExpiresAt, setVipExpiresAt] =
+    useState<string | null>(null);
+
+  const [vipBuying, setVipBuying] =
+    useState(false);
+
+  const [vipMessage, setVipMessage] =
+    useState("");
+
+  const vipText =
+    language === "en"
+      ? {
+          title: "TrustyPaws VIP",
+          subtitle:
+            "VIP status for 30 days. No automatic renewal.",
+          price: `${VIP_PRICE_STARS} Telegram Stars`,
+          buy: `Buy VIP — ${VIP_PRICE_STARS} ⭐`,
+          buying: "Preparing payment...",
+          active: "VIP active",
+          expires: "Active until",
+          renewNote:
+            "When VIP expires, you decide whether to buy another 30 days. Stars are never charged automatically.",
+          feature1: "👑 VIP status in TrustyPaws",
+          feature2: "🗓️ Exactly 30 days from purchase",
+          feature3: "⭐ Manual renewal only",
+          loading: "Checking VIP status...",
+          needTelegram:
+            "Open TrustyPaws through the Telegram bot to pay with Stars.",
+          invoiceError:
+            "Could not create the Telegram Stars invoice.",
+          cancelled: "Payment cancelled.",
+          failed: "Payment failed. Stars were not charged.",
+          pending:
+            "Payment is processing. VIP status will update shortly.",
+          paid:
+            "Payment received. Activating VIP...",
+          activated:
+            "VIP activated successfully! 👑",
+          statusError:
+            "Could not refresh VIP status.",
+        }
+      : language === "ua"
+      ? {
+          title: "TrustyPaws VIP",
+          subtitle:
+            "VIP-статус на 30 днів. Без автоматичного продовження.",
+          price: `${VIP_PRICE_STARS} Telegram Stars`,
+          buy: `Купити VIP — ${VIP_PRICE_STARS} ⭐`,
+          buying: "Готуємо оплату...",
+          active: "VIP активний",
+          expires: "Активний до",
+          renewNote:
+            "Після завершення VIP ти сам вирішуєш, чи купувати ще 30 днів. Stars автоматично не списуються.",
+          feature1: "👑 VIP-статус у TrustyPaws",
+          feature2: "🗓️ Рівно 30 днів з моменту покупки",
+          feature3: "⭐ Лише ручне продовження",
+          loading: "Перевіряємо VIP-статус...",
+          needTelegram:
+            "Відкрий TrustyPaws через Telegram-бота, щоб оплатити Stars.",
+          invoiceError:
+            "Не вдалося створити рахунок Telegram Stars.",
+          cancelled: "Оплату скасовано.",
+          failed:
+            "Оплата не пройшла. Stars не списані.",
+          pending:
+            "Платіж обробляється. VIP скоро оновиться.",
+          paid:
+            "Оплату отримано. Активуємо VIP...",
+          activated:
+            "VIP успішно активовано! 👑",
+          statusError:
+            "Не вдалося оновити VIP-статус.",
+        }
+      : {
+          title: "TrustyPaws VIP",
+          subtitle:
+            "VIP-статус на 30 дней. Без автоматического продления.",
+          price: `${VIP_PRICE_STARS} Telegram Stars`,
+          buy: `Купить VIP — ${VIP_PRICE_STARS} ⭐`,
+          buying: "Подготавливаем оплату...",
+          active: "VIP активен",
+          expires: "Активен до",
+          renewNote:
+            "После окончания VIP ты сам решаешь, покупать ли ещё 30 дней. Stars автоматически не списываются.",
+          feature1: "👑 VIP-статус в TrustyPaws",
+          feature2: "🗓️ Ровно 30 дней с момента покупки",
+          feature3: "⭐ Только ручное продление",
+          loading: "Проверяем VIP-статус...",
+          needTelegram:
+            "Открой TrustyPaws через Telegram-бота, чтобы оплатить Stars.",
+          invoiceError:
+            "Не удалось создать счёт Telegram Stars.",
+          cancelled: "Оплата отменена.",
+          failed:
+            "Оплата не прошла. Stars не списаны.",
+          pending:
+            "Платёж обрабатывается. VIP скоро обновится.",
+          paid:
+            "Оплата получена. Активируем VIP...",
+          activated:
+            "VIP успешно активирован! 👑",
+          statusError:
+            "Не удалось обновить VIP-статус.",
+        };
+
+  const formatVipDate = (
+    value: string
+  ) => {
+    const locale =
+      language === "en"
+        ? "en-US"
+        : language === "ua"
+        ? "uk-UA"
+        : "ru-RU";
+
+    try {
+      return new Intl.DateTimeFormat(
+        locale,
+        {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      ).format(
+        new Date(value)
+      );
+    } catch {
+      return value;
+    }
+  };
+
+  const loadVipStatus = async (
+    silent = false
+  ) => {
+    if (
+      !supabaseReady ||
+      !userId
+    ) {
+      setVipActive(false);
+      setVipExpiresAt(null);
+      setVipLoading(false);
+      return false;
+    }
+
+    if (!silent) {
+      setVipLoading(true);
+    }
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "is_vip,vip_expires_at"
+        )
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      const expiresAt =
+        data?.vip_expires_at ??
+        null;
+
+      const active = Boolean(
+        data?.is_vip === true &&
+          expiresAt &&
+          new Date(
+            expiresAt
+          ).getTime() >
+            Date.now()
+      );
+
+      setVipActive(active);
+      setVipExpiresAt(
+        expiresAt
+      );
+
+      return active;
+    } catch (error) {
+      console.error(
+        "TrustyPaws VIP status error:",
+        error
+      );
+
+      if (!silent) {
+        setVipMessage(
+          vipText.statusError
+        );
+      }
+
+      return false;
+    } finally {
+      if (!silent) {
+        setVipLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    void loadVipStatus();
+
+    const timer =
+      window.setInterval(
+        () => {
+          void loadVipStatus(
+            true
+          );
+        },
+        30000
+      );
+
+    return () => {
+      window.clearInterval(
+        timer
+      );
+    };
+  }, [
+    supabaseReady,
+    userId,
+    language,
+  ]);
+
+  const refreshVipAfterPayment =
+    async () => {
+      for (
+        let attempt = 0;
+        attempt < 8;
+        attempt += 1
+      ) {
+        await new Promise<void>(
+          (resolve) => {
+            window.setTimeout(
+              resolve,
+              750
+            );
+          }
+        );
+
+        const active =
+          await loadVipStatus(
+            true
+          );
+
+        if (active) {
+          setVipMessage(
+            vipText.activated
+          );
+          return;
+        }
+      }
+
+      setVipMessage(
+        vipText.pending
+      );
+    };
+
+  const buyVip = async () => {
+    if (
+      vipBuying ||
+      vipActive ||
+      !supabaseReady ||
+      !userId
+    ) {
+      return;
+    }
+
+    setVipBuying(true);
+    setVipMessage("");
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase.functions.invoke(
+        "create-vip-invoice",
+        {
+          body: {
+            userId,
+          },
+        }
+      );
+
+      if (error) {
+        console.error(
+          "TrustyPaws invoice function error:",
+          error
+        );
+        throw error;
+      }
+
+      const invoiceUrl =
+        data?.invoiceUrl;
+
+      if (
+        typeof invoiceUrl !==
+          "string" ||
+        !invoiceUrl
+      ) {
+        throw new Error(
+          "Invoice URL missing"
+        );
+      }
+
+      const telegram =
+        (
+          window as unknown as {
+            Telegram?: {
+              WebApp?: {
+                openInvoice?: (
+                  url: string,
+                  callback?: (
+                    status: string
+                  ) => void
+                ) => void;
+                HapticFeedback?: {
+                  impactOccurred?: (
+                    style:
+                      | "light"
+                      | "medium"
+                      | "heavy"
+                  ) => void;
+                };
+              };
+            };
+          }
+        ).Telegram?.WebApp;
+
+      if (
+        !telegram?.openInvoice
+      ) {
+        setVipMessage(
+          vipText.needTelegram
+        );
+        return;
+      }
+
+      telegram.HapticFeedback
+        ?.impactOccurred?.(
+          "medium"
+        );
+
+      telegram.openInvoice(
+        invoiceUrl,
+        (status) => {
+          if (
+            status === "paid"
+          ) {
+            setVipMessage(
+              vipText.paid
+            );
+
+            void refreshVipAfterPayment();
+            return;
+          }
+
+          if (
+            status === "pending"
+          ) {
+            setVipMessage(
+              vipText.pending
+            );
+
+            void refreshVipAfterPayment();
+            return;
+          }
+
+          if (
+            status === "failed"
+          ) {
+            setVipMessage(
+              vipText.failed
+            );
+            return;
+          }
+
+          setVipMessage(
+            vipText.cancelled
+          );
+        }
+      );
+    } catch (error) {
+      console.error(
+        "TrustyPaws VIP purchase error:",
+        error
+      );
+
+      setVipMessage(
+        vipText.invoiceError
+      );
+    } finally {
+      setVipBuying(false);
+    }
+  };
+
   return (
     <div className="page">
-
       <PageHeader
         eyebrow={
           t.trustyPaws
@@ -5810,48 +6403,291 @@ function ShopScreen({
         subtitle={
           t.shopSubtitle
         }
+        badge={
+          vipActive
+            ? "VIP 👑"
+            : undefined
+        }
       />
 
-      <section className="shop-coming">
+      <section
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          padding: "22px",
+          borderRadius: "22px",
+          border:
+            vipActive
+              ? "1px solid rgba(255,190,70,0.42)"
+              : "1px solid rgba(255,255,255,0.10)",
+          background:
+            "linear-gradient(145deg, rgba(40,34,24,0.96), rgba(20,25,32,0.98))",
+          boxShadow:
+            "0 18px 45px rgba(0,0,0,0.24)",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            width: "180px",
+            height: "180px",
+            borderRadius:
+              "50%",
+            right: "-70px",
+            top: "-85px",
+            background:
+              "rgba(255,181,58,0.12)",
+            filter:
+              "blur(4px)",
+            pointerEvents:
+              "none",
+          }}
+        />
 
-        <div className="shop-icon">
-          🛍️
+        <div
+          style={{
+            display: "flex",
+            alignItems:
+              "center",
+            gap: "14px",
+            marginBottom:
+              "16px",
+          }}
+        >
+          <div
+            style={{
+              width: "56px",
+              height: "56px",
+              borderRadius:
+                "17px",
+              display: "grid",
+              placeItems:
+                "center",
+              fontSize: "28px",
+              background:
+                "rgba(255,183,63,0.13)",
+              border:
+                "1px solid rgba(255,183,63,0.24)",
+              flexShrink: 0,
+            }}
+          >
+            👑
+          </div>
+
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize:
+                  "12px",
+                letterSpacing:
+                  "0.12em",
+                fontWeight: 800,
+                color:
+                  "#ffbd4a",
+                marginBottom:
+                  "4px",
+              }}
+            >
+              VIP
+            </div>
+
+            <h2
+              style={{
+                margin: 0,
+                fontSize:
+                  "24px",
+              }}
+            >
+              {vipText.title}
+            </h2>
+          </div>
+
+          <div
+            style={{
+              fontWeight: 900,
+              fontSize: "18px",
+              color:
+                "#ffbd4a",
+              whiteSpace:
+                "nowrap",
+            }}
+          >
+            {VIP_PRICE_STARS} ⭐
+          </div>
         </div>
 
-        <div className="coming-badge">
-          {t.soon}
-        </div>
-
-        <h2>
-          {t.shopComing}
-        </h2>
-
-        <p>
-          {
-            t.shopDescription
-          }
+        <p
+          style={{
+            margin:
+              "0 0 18px",
+            opacity: 0.72,
+            lineHeight: 1.55,
+          }}
+        >
+          {vipText.subtitle}
         </p>
 
-        <div className="shop-preview">
-          <span>
-            🎨
-          </span>
-
-          <span>
-            🧸
-          </span>
-
-          <span>
-            👑
-          </span>
-
-          <span>
-            ✨
-          </span>
+        <div
+          style={{
+            display: "grid",
+            gap: "9px",
+            marginBottom:
+              "18px",
+          }}
+        >
+          <div>
+            {vipText.feature1}
+          </div>
+          <div>
+            {vipText.feature2}
+          </div>
+          <div>
+            {vipText.feature3}
+          </div>
         </div>
 
-      </section>
+        {vipLoading ? (
+          <div
+            style={{
+              padding:
+                "13px 15px",
+              borderRadius:
+                "14px",
+              background:
+                "rgba(255,255,255,0.05)",
+              textAlign:
+                "center",
+              opacity: 0.72,
+            }}
+          >
+            {vipText.loading}
+          </div>
+        ) : vipActive ? (
+          <div
+            style={{
+              padding:
+                "15px 16px",
+              borderRadius:
+                "16px",
+              background:
+                "rgba(255,183,63,0.10)",
+              border:
+                "1px solid rgba(255,183,63,0.22)",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 900,
+                color:
+                  "#ffbd4a",
+                marginBottom:
+                  "5px",
+              }}
+            >
+              ✓ {vipText.active}
+            </div>
 
+            {vipExpiresAt && (
+              <div
+                style={{
+                  fontSize:
+                    "13px",
+                  opacity: 0.78,
+                }}
+              >
+                {vipText.expires}: {" "}
+                <strong>
+                  {formatVipDate(
+                    vipExpiresAt
+                  )}
+                </strong>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={
+              vipBuying ||
+              !userId ||
+              !supabaseReady
+            }
+            onClick={() =>
+              void buyVip()
+            }
+            style={{
+              width: "100%",
+              minHeight:
+                "52px",
+              border: 0,
+              borderRadius:
+                "15px",
+              fontWeight: 900,
+              fontSize:
+                "15px",
+              cursor:
+                vipBuying
+                  ? "wait"
+                  : "pointer",
+              background:
+                "linear-gradient(135deg, #ffb63e, #ffcc65)",
+              color: "#17130d",
+              opacity:
+                vipBuying ||
+                !userId ||
+                !supabaseReady
+                  ? 0.58
+                  : 1,
+            }}
+          >
+            {vipBuying
+              ? vipText.buying
+              : vipText.buy}
+          </button>
+        )}
+
+        {vipMessage && (
+          <div
+            style={{
+              marginTop:
+                "12px",
+              padding:
+                "11px 13px",
+              borderRadius:
+                "13px",
+              background:
+                "rgba(255,255,255,0.055)",
+              fontSize:
+                "13px",
+              lineHeight: 1.4,
+              textAlign:
+                "center",
+            }}
+          >
+            {vipMessage}
+          </div>
+        )}
+
+        <div
+          style={{
+            marginTop:
+              "14px",
+            fontSize:
+              "12px",
+            opacity: 0.58,
+            lineHeight: 1.5,
+            textAlign:
+              "center",
+          }}
+        >
+          {vipText.renewNote}
+        </div>
+      </section>
     </div>
   );
 }
@@ -5935,10 +6771,6 @@ function Stat({
     </div>
   );
 }
-
-/* =====================================================
-   TASK CARD
-===================================================== */
 
 function TaskCard({
   t,
