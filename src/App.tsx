@@ -2890,25 +2890,6 @@ const formatTime = (
       />
     );
   }
-
-  const hasTaskReward =
-    dailyAvailable ||
-    (
-      dailyPetCount >=
-        DAILY_PET_200_GOAL &&
-      !dailyPet200Claimed
-    ) ||
-    (
-      dailyPetCount >=
-        DAILY_PET_500_GOAL &&
-      !dailyPet500Claimed
-    ) ||
-    (
-      petCount >=
-        ONE_TIME_PET_1000_GOAL &&
-      !oneTimePet1000Claimed
-    );
-
   return (
     <div className="app">
 
