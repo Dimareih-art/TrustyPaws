@@ -79,6 +79,17 @@ const DAILY_PET_500_REWARD = 300;
 
 const ONE_TIME_PET_1000_GOAL = 1000;
 const ONE_TIME_PET_1000_REWARD = 2500;
+const ONE_TIME_PET_5000_GOAL = 5000;
+const ONE_TIME_PET_5000_REWARD = 15000;
+const ONE_TIME_PET_10000_GOAL = 10000;
+const ONE_TIME_PET_10000_REWARD = 35000;
+
+const ONE_TIME_FRIEND_1_GOAL = 1;
+const ONE_TIME_FRIEND_1_REWARD = 200;
+const ONE_TIME_FRIEND_5_GOAL = 5;
+const ONE_TIME_FRIEND_5_REWARD = 1000;
+const ONE_TIME_FRIEND_10_GOAL = 10;
+const ONE_TIME_FRIEND_10_REWARD = 50000;
 
 const VIP_PRICE_STARS = 199;
 const VIP_TAP_BONUS = 20;
@@ -90,6 +101,11 @@ const DAILY_PET_COUNT_KEY = "trusty_daily_pet_count";
 const DAILY_PET_200_CLAIMED_KEY = "trusty_daily_pet_200_claimed";
 const DAILY_PET_500_CLAIMED_KEY = "trusty_daily_pet_500_claimed";
 const ONE_TIME_PET_1000_CLAIMED_KEY = "trusty_one_time_pet_1000_claimed";
+const ONE_TIME_PET_5000_CLAIMED_KEY = "trusty_one_time_pet_5000_claimed";
+const ONE_TIME_PET_10000_CLAIMED_KEY = "trusty_one_time_pet_10000_claimed";
+const ONE_TIME_FRIEND_1_CLAIMED_KEY = "trusty_one_time_friend_1_claimed";
+const ONE_TIME_FRIEND_5_CLAIMED_KEY = "trusty_one_time_friend_5_claimed";
+const ONE_TIME_FRIEND_10_CLAIMED_KEY = "trusty_one_time_friend_10_claimed";
 
 const ENERGY_STORAGE_KEY =
   "trusty_energy";
@@ -1672,6 +1688,33 @@ function App() {
       )
     );
 
+  const [oneTimePet5000Claimed, setOneTimePet5000Claimed] =
+    useState(() =>
+      getStoredBoolean(ONE_TIME_PET_5000_CLAIMED_KEY, false)
+    );
+
+  const [oneTimePet10000Claimed, setOneTimePet10000Claimed] =
+    useState(() =>
+      getStoredBoolean(ONE_TIME_PET_10000_CLAIMED_KEY, false)
+    );
+
+  const [oneTimeFriend1Claimed, setOneTimeFriend1Claimed] =
+    useState(() =>
+      getStoredBoolean(ONE_TIME_FRIEND_1_CLAIMED_KEY, false)
+    );
+
+  const [oneTimeFriend5Claimed, setOneTimeFriend5Claimed] =
+    useState(() =>
+      getStoredBoolean(ONE_TIME_FRIEND_5_CLAIMED_KEY, false)
+    );
+
+  const [oneTimeFriend10Claimed, setOneTimeFriend10Claimed] =
+    useState(() =>
+      getStoredBoolean(ONE_TIME_FRIEND_10_CLAIMED_KEY, false)
+    );
+
+  const [friendCount, setFriendCount] = useState(0);
+
  const [dailyResetAt, setDailyResetAt] =
   useState(() => {
     const stored = getStoredNumber(
@@ -2134,11 +2177,71 @@ function App() {
   }, [oneTimePet1000Claimed]);
 
   useEffect(() => {
+    localStorage.setItem(ONE_TIME_PET_5000_CLAIMED_KEY, String(oneTimePet5000Claimed));
+  }, [oneTimePet5000Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(ONE_TIME_PET_10000_CLAIMED_KEY, String(oneTimePet10000Claimed));
+  }, [oneTimePet10000Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(ONE_TIME_FRIEND_1_CLAIMED_KEY, String(oneTimeFriend1Claimed));
+  }, [oneTimeFriend1Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(ONE_TIME_FRIEND_5_CLAIMED_KEY, String(oneTimeFriend5Claimed));
+  }, [oneTimeFriend5Claimed]);
+
+  useEffect(() => {
+    localStorage.setItem(ONE_TIME_FRIEND_10_CLAIMED_KEY, String(oneTimeFriend10Claimed));
+  }, [oneTimeFriend10Claimed]);
+
+  useEffect(() => {
     localStorage.setItem(
       DAILY_RESET_AT_KEY,
       String(dailyResetAt)
     );
   }, [dailyResetAt]);
+
+  /* ===================================================
+     FRIEND COUNT FOR ONE-TIME TASKS
+  =================================================== */
+
+  useEffect(() => {
+    if (!supabaseReady || !userId) {
+      setFriendCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFriendCount = async () => {
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("id,user_id,friend_id")
+        .or(`user_id.eq.${userId},friend_id.eq.${userId}`);
+
+      if (error) {
+        console.error("TrustyPaws friend count error:", error);
+        return;
+      }
+
+      if (!cancelled) {
+        setFriendCount((data ?? []).length);
+      }
+    };
+
+    void loadFriendCount();
+
+    const timer = window.setInterval(() => {
+      void loadFriendCount();
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [supabaseReady, userId, activeTab]);
 
   /* ===================================================
      DAILY TASK RESET — ONE SHARED 24H TIMER
@@ -2795,6 +2898,37 @@ function App() {
     setOneTimePet1000Claimed(true);
   };
 
+
+  const claimOneTimePet5000 = () => {
+    if (petCount < ONE_TIME_PET_5000_GOAL || oneTimePet5000Claimed) return;
+    setComfort((value) => value + ONE_TIME_PET_5000_REWARD);
+    setOneTimePet5000Claimed(true);
+  };
+
+  const claimOneTimePet10000 = () => {
+    if (petCount < ONE_TIME_PET_10000_GOAL || oneTimePet10000Claimed) return;
+    setComfort((value) => value + ONE_TIME_PET_10000_REWARD);
+    setOneTimePet10000Claimed(true);
+  };
+
+  const claimOneTimeFriend1 = () => {
+    if (friendCount < ONE_TIME_FRIEND_1_GOAL || oneTimeFriend1Claimed) return;
+    setComfort((value) => value + ONE_TIME_FRIEND_1_REWARD);
+    setOneTimeFriend1Claimed(true);
+  };
+
+  const claimOneTimeFriend5 = () => {
+    if (friendCount < ONE_TIME_FRIEND_5_GOAL || oneTimeFriend5Claimed) return;
+    setComfort((value) => value + ONE_TIME_FRIEND_5_REWARD);
+    setOneTimeFriend5Claimed(true);
+  };
+
+  const claimOneTimeFriend10 = () => {
+    if (friendCount < ONE_TIME_FRIEND_10_GOAL || oneTimeFriend10Claimed) return;
+    setComfort((value) => value + ONE_TIME_FRIEND_10_REWARD);
+    setOneTimeFriend10Claimed(true);
+  };
+
   /* ===================================================
      RESET
   =================================================== */
@@ -2829,6 +2963,12 @@ function App() {
       setDailyPet200Claimed(false);
       setDailyPet500Claimed(false);
       setOneTimePet1000Claimed(false);
+      setOneTimePet5000Claimed(false);
+      setOneTimePet10000Claimed(false);
+      setOneTimeFriend1Claimed(false);
+      setOneTimeFriend5Claimed(false);
+      setOneTimeFriend10Claimed(false);
+      setFriendCount(0);
       setDailyResetAt(
         now + DAILY_RESET_MS
       );
@@ -2899,6 +3039,11 @@ function App() {
         ONE_TIME_PET_1000_CLAIMED_KEY,
         "false"
       );
+      localStorage.setItem(ONE_TIME_PET_5000_CLAIMED_KEY, "false");
+      localStorage.setItem(ONE_TIME_PET_10000_CLAIMED_KEY, "false");
+      localStorage.setItem(ONE_TIME_FRIEND_1_CLAIMED_KEY, "false");
+      localStorage.setItem(ONE_TIME_FRIEND_5_CLAIMED_KEY, "false");
+      localStorage.setItem(ONE_TIME_FRIEND_10_CLAIMED_KEY, "false");
 
       localStorage.setItem(
         "trusty_selected_background",
@@ -3313,6 +3458,12 @@ const formatTime = (
               dailyPet500Claimed={dailyPet500Claimed}
               totalPetCount={petCount}
               oneTimePet1000Claimed={oneTimePet1000Claimed}
+              oneTimePet5000Claimed={oneTimePet5000Claimed}
+              oneTimePet10000Claimed={oneTimePet10000Claimed}
+              oneTimeFriend1Claimed={oneTimeFriend1Claimed}
+              oneTimeFriend5Claimed={oneTimeFriend5Claimed}
+              oneTimeFriend10Claimed={oneTimeFriend10Claimed}
+              friendCount={friendCount}
               secondsUntilReset={Math.max(
                 0,
                 Math.ceil(
@@ -3323,6 +3474,11 @@ const formatTime = (
               onClaimDailyPet200={claimDailyPet200}
               onClaimDailyPet500={claimDailyPet500}
               onClaimOneTimePet1000={claimOneTimePet1000}
+              onClaimOneTimePet5000={claimOneTimePet5000}
+              onClaimOneTimePet10000={claimOneTimePet10000}
+              onClaimOneTimeFriend1={claimOneTimeFriend1}
+              onClaimOneTimeFriend5={claimOneTimeFriend5}
+              onClaimOneTimeFriend10={claimOneTimeFriend10}
               formatTime={formatTime}
             />
           )}
@@ -3376,8 +3532,12 @@ const formatTime = (
                 !dailyPet200Claimed) ||
               (dailyPetCount >= DAILY_PET_500_GOAL &&
                 !dailyPet500Claimed) ||
-              (petCount >= ONE_TIME_PET_1000_GOAL &&
-                !oneTimePet1000Claimed)
+              (petCount >= ONE_TIME_PET_1000_GOAL && !oneTimePet1000Claimed) ||
+              (petCount >= ONE_TIME_PET_5000_GOAL && !oneTimePet5000Claimed) ||
+              (petCount >= ONE_TIME_PET_10000_GOAL && !oneTimePet10000Claimed) ||
+              (friendCount >= ONE_TIME_FRIEND_1_GOAL && !oneTimeFriend1Claimed) ||
+              (friendCount >= ONE_TIME_FRIEND_5_GOAL && !oneTimeFriend5Claimed) ||
+              (friendCount >= ONE_TIME_FRIEND_10_GOAL && !oneTimeFriend10Claimed)
             }
         />
 
@@ -4979,11 +5139,22 @@ function TasksScreen({
   dailyPet500Claimed,
   totalPetCount,
   oneTimePet1000Claimed,
+  oneTimePet5000Claimed,
+  oneTimePet10000Claimed,
+  oneTimeFriend1Claimed,
+  oneTimeFriend5Claimed,
+  oneTimeFriend10Claimed,
+  friendCount,
   secondsUntilReset,
   onClaimDaily,
   onClaimDailyPet200,
   onClaimDailyPet500,
   onClaimOneTimePet1000,
+  onClaimOneTimePet5000,
+  onClaimOneTimePet10000,
+  onClaimOneTimeFriend1,
+  onClaimOneTimeFriend5,
+  onClaimOneTimeFriend10,
   formatTime,
 }: {
   t: Translation;
@@ -4994,15 +5165,25 @@ function TasksScreen({
   dailyPet500Claimed: boolean;
   totalPetCount: number;
   oneTimePet1000Claimed: boolean;
+  oneTimePet5000Claimed: boolean;
+  oneTimePet10000Claimed: boolean;
+  oneTimeFriend1Claimed: boolean;
+  oneTimeFriend5Claimed: boolean;
+  oneTimeFriend10Claimed: boolean;
+  friendCount: number;
   secondsUntilReset: number;
   onClaimDaily: () => void;
   onClaimDailyPet200: () => void;
   onClaimDailyPet500: () => void;
   onClaimOneTimePet1000: () => void;
+  onClaimOneTimePet5000: () => void;
+  onClaimOneTimePet10000: () => void;
+  onClaimOneTimeFriend1: () => void;
+  onClaimOneTimeFriend5: () => void;
+  onClaimOneTimeFriend10: () => void;
   formatTime: (seconds: number) => string;
 }) {
-  const [taskSection, setTaskSection] =
-    useState<"daily" | "oneTime">("daily");
+  const [taskSection, setTaskSection] = useState<"daily" | "oneTime">("daily");
 
   const text =
     language === "en"
@@ -5012,9 +5193,15 @@ function TasksScreen({
           resetIn: "Daily tasks refresh in",
           pet200: "Pet the kitty 200 times",
           pet500: "Pet the kitty 500 times",
-          pet1000: "Pet the kitty 1000 times",
+          pet1000: "Pet the kitty 1,000 times",
+          pet5000: "Pet the kitty 5,000 times",
+          pet10000: "Pet the kitty 10,000 times",
+          friend1: "Add 1 friend",
+          friend5: "Add 5 friends",
+          friend10: "Add 10 friends",
           love: "Pet your kitty during the current daily cycle.",
-          milestone: "A permanent milestone. This task can only be claimed once.",
+          milestone: "Permanent achievement. Claim the reward once after completing it.",
+          friendMilestone: "Add accepted friends in TrustyPaws. Only accepted friendships count.",
         }
       : language === "ua"
       ? {
@@ -5023,9 +5210,15 @@ function TasksScreen({
           resetIn: "Щоденні завдання оновляться через",
           pet200: "Погладь котика 200 разів",
           pet500: "Погладь котика 500 разів",
-          pet1000: "Погладь котика 1000 разів",
+          pet1000: "Погладь котика 1 000 разів",
+          pet5000: "Погладь котика 5 000 разів",
+          pet10000: "Погладь котика 10 000 разів",
+          friend1: "Додай 1 друга",
+          friend5: "Додай 5 друзів",
+          friend10: "Додай 10 друзів",
           love: "Гладь котика протягом поточного щоденного циклу.",
-          milestone: "Постійне досягнення. Нагороду можна забрати лише один раз.",
+          milestone: "Постійне досягнення. Після виконання нагороду можна забрати один раз.",
+          friendMilestone: "Додавай прийнятих друзів у TrustyPaws. Враховуються лише прийняті дружби.",
         }
       : {
           daily: "Ежедневные",
@@ -5033,9 +5226,15 @@ function TasksScreen({
           resetIn: "Ежедневные задания обновятся через",
           pet200: "Погладь котика 200 раз",
           pet500: "Погладь котика 500 раз",
-          pet1000: "Погладь котика 1000 раз",
+          pet1000: "Погладь котика 1 000 раз",
+          pet5000: "Погладь котика 5 000 раз",
+          pet10000: "Погладь котика 10 000 раз",
+          friend1: "Добавь 1 друга",
+          friend5: "Добавь 5 друзей",
+          friend10: "Добавь 10 друзей",
           love: "Гладь котика в течение текущего ежедневного цикла.",
-          milestone: "Постоянное достижение. Награду можно забрать только один раз.",
+          milestone: "Постоянное достижение. После выполнения награду можно забрать один раз.",
+          friendMilestone: "Добавляй принятых друзей в TrustyPaws. Учитываются только принятые дружбы.",
         };
 
   const dailyClaimed =
@@ -5044,7 +5243,40 @@ function TasksScreen({
     Number(dailyPet500Claimed);
 
   const oneTimeClaimed =
-    Number(oneTimePet1000Claimed);
+    Number(oneTimePet1000Claimed) +
+    Number(oneTimePet5000Claimed) +
+    Number(oneTimePet10000Claimed) +
+    Number(oneTimeFriend1Claimed) +
+    Number(oneTimeFriend5Claimed) +
+    Number(oneTimeFriend10Claimed);
+
+  const achievementCard = (
+    icon: string,
+    title: string,
+    description: string,
+    current: number,
+    goal: number,
+    reward: number,
+    completed: boolean,
+    onClaim: () => void
+  ) => (
+    <TaskCard
+      t={t}
+      icon={icon}
+      title={title}
+      description={description}
+      progress={Math.min(100, (current / goal) * 100)}
+      progressText={
+        completed
+          ? t.taskCompleted
+          : `${Math.min(current, goal)} / ${goal}`
+      }
+      reward={reward}
+      completed={completed}
+      available={current >= goal && !completed}
+      onClaim={onClaim}
+    />
+  );
 
   return (
     <div className="page">
@@ -5052,41 +5284,21 @@ function TasksScreen({
         eyebrow={t.rewards}
         title={t.tasks}
         subtitle={t.tasksSubtitle}
-        badge={
-          taskSection === "daily"
-            ? `${dailyClaimed}/3`
-            : `${oneTimeClaimed}/1`
-        }
+        badge={taskSection === "daily" ? `${dailyClaimed}/3` : `${oneTimeClaimed}/6`}
       />
 
-      <div
-        className="upgrade-tabs"
-        style={{ marginBottom: "14px" }}
-      >
+      <div className="upgrade-tabs" style={{ marginBottom: "14px" }}>
         <button
           type="button"
-          className={
-            taskSection === "daily"
-              ? "active"
-              : ""
-          }
-          onClick={() =>
-            setTaskSection("daily")
-          }
+          className={taskSection === "daily" ? "active" : ""}
+          onClick={() => setTaskSection("daily")}
         >
           {text.daily}
         </button>
-
         <button
           type="button"
-          className={
-            taskSection === "oneTime"
-              ? "active"
-              : ""
-          }
-          onClick={() =>
-            setTaskSection("oneTime")
-          }
+          className={taskSection === "oneTime" ? "active" : ""}
+          onClick={() => setTaskSection("oneTime")}
         >
           {text.oneTime}
         </button>
@@ -5099,162 +5311,55 @@ function TasksScreen({
               marginBottom: "14px",
               padding: "14px 16px",
               borderRadius: "16px",
-              background:
-                "rgba(255,255,255,0.06)",
-              border:
-                "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.08)",
               textAlign: "center",
             }}
           >
-            <div
-              style={{
-                fontSize: "13px",
-                opacity: 0.68,
-                marginBottom: "5px",
-              }}
-            >
+            <div style={{ fontSize: "13px", opacity: 0.68, marginBottom: "5px" }}>
               {text.resetIn}
             </div>
-
-            <div
-              style={{
-                fontSize: "20px",
-                fontWeight: 800,
-              }}
-            >
+            <div style={{ fontSize: "20px", fontWeight: 800 }}>
               {formatTime(secondsUntilReset)}
             </div>
           </div>
 
           <section className="daily-bonus">
-            <div className="daily-icon">
-              🎁
-            </div>
-
+            <div className="daily-icon">🎁</div>
             <div className="daily-content">
               <span>{t.dailyBonus}</span>
               <h3>{t.everyDay}</h3>
               <p>{t.dailyDescription}</p>
             </div>
-
             <div className="daily-action">
-              <strong>
-                +{DAILY_REWARD}
-              </strong>
-
+              <strong>+{DAILY_REWARD}</strong>
               {dailyAvailable ? (
-                <button
-                  type="button"
-                  onClick={onClaimDaily}
-                >
-                  {t.claim}
-                </button>
+                <button type="button" onClick={onClaimDaily}>{t.claim}</button>
               ) : (
-                <span className="claimed-text">
-                  {t.received}
-                </span>
+                <span className="claimed-text">{t.received}</span>
               )}
             </div>
           </section>
 
           <div className="list-title task-list-title">
-            <span>{text.daily}</span>
-            <b>{dailyClaimed}/3</b>
+            <span>{text.daily}</span><b>{dailyClaimed}/3</b>
           </div>
 
-          <TaskCard
-            t={t}
-            icon="🐾"
-            title={text.pet200}
-            description={text.love}
-            progress={Math.min(
-              100,
-              (dailyPetCount /
-                DAILY_PET_200_GOAL) *
-                100
-            )}
-            progressText={
-              dailyPet200Claimed
-                ? t.taskCompleted
-                : `${Math.min(
-                    dailyPetCount,
-                    DAILY_PET_200_GOAL
-                  )} / ${DAILY_PET_200_GOAL}`
-            }
-            reward={DAILY_PET_200_REWARD}
-            completed={dailyPet200Claimed}
-            available={
-              dailyPetCount >=
-                DAILY_PET_200_GOAL &&
-              !dailyPet200Claimed
-            }
-            onClaim={onClaimDailyPet200}
-          />
-
-          <TaskCard
-            t={t}
-            icon="🐾"
-            title={text.pet500}
-            description={text.love}
-            progress={Math.min(
-              100,
-              (dailyPetCount /
-                DAILY_PET_500_GOAL) *
-                100
-            )}
-            progressText={
-              dailyPet500Claimed
-                ? t.taskCompleted
-                : `${Math.min(
-                    dailyPetCount,
-                    DAILY_PET_500_GOAL
-                  )} / ${DAILY_PET_500_GOAL}`
-            }
-            reward={DAILY_PET_500_REWARD}
-            completed={dailyPet500Claimed}
-            available={
-              dailyPetCount >=
-                DAILY_PET_500_GOAL &&
-              !dailyPet500Claimed
-            }
-            onClaim={onClaimDailyPet500}
-          />
+          {achievementCard("🐾", text.pet200, text.love, dailyPetCount, DAILY_PET_200_GOAL, DAILY_PET_200_REWARD, dailyPet200Claimed, onClaimDailyPet200)}
+          {achievementCard("🐾", text.pet500, text.love, dailyPetCount, DAILY_PET_500_GOAL, DAILY_PET_500_REWARD, dailyPet500Claimed, onClaimDailyPet500)}
         </>
       ) : (
         <>
           <div className="list-title task-list-title">
-            <span>{text.oneTime}</span>
-            <b>{oneTimeClaimed}/1</b>
+            <span>{text.oneTime}</span><b>{oneTimeClaimed}/6</b>
           </div>
 
-          <TaskCard
-            t={t}
-            icon="🏆"
-            title={text.pet1000}
-            description={text.milestone}
-            progress={Math.min(
-              100,
-              (totalPetCount /
-                ONE_TIME_PET_1000_GOAL) *
-                100
-            )}
-            progressText={
-              oneTimePet1000Claimed
-                ? t.taskCompleted
-                : `${Math.min(
-                    totalPetCount,
-                    ONE_TIME_PET_1000_GOAL
-                  )} / ${ONE_TIME_PET_1000_GOAL}`
-            }
-            reward={ONE_TIME_PET_1000_REWARD}
-            completed={oneTimePet1000Claimed}
-            available={
-              totalPetCount >=
-                ONE_TIME_PET_1000_GOAL &&
-              !oneTimePet1000Claimed
-            }
-            onClaim={onClaimOneTimePet1000}
-          />
+          {achievementCard("🏆", text.pet1000, text.milestone, totalPetCount, ONE_TIME_PET_1000_GOAL, ONE_TIME_PET_1000_REWARD, oneTimePet1000Claimed, onClaimOneTimePet1000)}
+          {achievementCard("🏆", text.pet5000, text.milestone, totalPetCount, ONE_TIME_PET_5000_GOAL, ONE_TIME_PET_5000_REWARD, oneTimePet5000Claimed, onClaimOneTimePet5000)}
+          {achievementCard("🏆", text.pet10000, text.milestone, totalPetCount, ONE_TIME_PET_10000_GOAL, ONE_TIME_PET_10000_REWARD, oneTimePet10000Claimed, onClaimOneTimePet10000)}
+          {achievementCard("👥", text.friend1, text.friendMilestone, friendCount, ONE_TIME_FRIEND_1_GOAL, ONE_TIME_FRIEND_1_REWARD, oneTimeFriend1Claimed, onClaimOneTimeFriend1)}
+          {achievementCard("👥", text.friend5, text.friendMilestone, friendCount, ONE_TIME_FRIEND_5_GOAL, ONE_TIME_FRIEND_5_REWARD, oneTimeFriend5Claimed, onClaimOneTimeFriend5)}
+          {achievementCard("👥", text.friend10, text.friendMilestone, friendCount, ONE_TIME_FRIEND_10_GOAL, ONE_TIME_FRIEND_10_REWARD, oneTimeFriend10Claimed, onClaimOneTimeFriend10)}
         </>
       )}
     </div>
@@ -6364,6 +6469,37 @@ function ShopScreen({
   const [vipMessage, setVipMessage] =
     useState("");
 
+  const [shopSection, setShopSection] =
+    useState<"accessories" | "pets" | "statuses">("statuses");
+
+  const shopText =
+    language === "en"
+      ? {
+          accessories: "Accessories",
+          pets: "Pets",
+          statuses: "Statuses",
+          comingTitle: "Coming in future updates",
+          accessoriesDescription: "New accessories and cosmetic items for your pet will appear here.",
+          petsDescription: "New pets will appear here in future updates.",
+        }
+      : language === "ua"
+      ? {
+          accessories: "Аксесуари",
+          pets: "Улюбленці",
+          statuses: "Статуси",
+          comingTitle: "Очікується в нових оновленнях",
+          accessoriesDescription: "Тут з’являться нові аксесуари та косметичні предмети для улюбленця.",
+          petsDescription: "У майбутніх оновленнях тут з’являться нові улюбленці.",
+        }
+      : {
+          accessories: "Аксессуары",
+          pets: "Питомцы",
+          statuses: "Статусы",
+          comingTitle: "Ожидается в новых обновлениях",
+          accessoriesDescription: "Здесь появятся новые аксессуары и косметические предметы для питомца.",
+          petsDescription: "В будущих обновлениях здесь появятся новые питомцы.",
+        };
+
   const vipText =
     language === "en"
       ? {
@@ -6776,6 +6912,53 @@ function ShopScreen({
         }
       />
 
+      <div className="upgrade-tabs" style={{ marginBottom: "14px" }}>
+        <button
+          type="button"
+          className={shopSection === "accessories" ? "active" : ""}
+          onClick={() => setShopSection("accessories")}
+        >
+          🎀 {shopText.accessories}
+        </button>
+        <button
+          type="button"
+          className={shopSection === "pets" ? "active" : ""}
+          onClick={() => setShopSection("pets")}
+        >
+          🐱 {shopText.pets}
+        </button>
+        <button
+          type="button"
+          className={shopSection === "statuses" ? "active" : ""}
+          onClick={() => setShopSection("statuses")}
+        >
+          👑 {shopText.statuses}
+        </button>
+      </div>
+
+      {shopSection !== "statuses" ? (
+        <section
+          style={{
+            padding: "28px 20px",
+            borderRadius: "22px",
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.045)",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "42px", marginBottom: "12px" }}>
+            {shopSection === "accessories" ? "🎀" : "🐱"}
+          </div>
+          <h3 style={{ margin: "0 0 8px", fontSize: "20px" }}>
+            {shopText.comingTitle}
+          </h3>
+          <p style={{ margin: 0, opacity: 0.68, lineHeight: 1.55 }}>
+            {shopSection === "accessories"
+              ? shopText.accessoriesDescription
+              : shopText.petsDescription}
+          </p>
+        </section>
+      ) : (
       <section
         style={{
           position: "relative",
@@ -7054,6 +7237,7 @@ function ShopScreen({
           {vipText.renewNote}
         </div>
       </section>
+      )}
     </div>
   );
 }
