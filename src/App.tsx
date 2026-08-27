@@ -1672,17 +1672,22 @@ function App() {
       )
     );
 
-  const [dailyResetAt, setDailyResetAt] =
-    useState(() => {
-      const stored = getStoredNumber(
-        DAILY_RESET_AT_KEY,
-        0
-      );
+ const [dailyResetAt, setDailyResetAt] =
+  useState(() => {
+    const stored = getStoredNumber(
+      DAILY_RESET_AT_KEY,
+      0
+    );
 
-      return stored > Date.now()
-        ? stored
-        : Date.now() + DAILY_RESET_MS;
-    });
+    if (
+      Number.isFinite(stored) &&
+      stored > 0
+    ) {
+      return stored;
+    }
+
+    return Date.now() + DAILY_RESET_MS;
+  });
 
   const [taskNow, setTaskNow] =
     useState(() => Date.now());
