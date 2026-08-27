@@ -2005,8 +2005,8 @@ function App() {
           {
             id: userId,
             username,
+            telegram_username: telegramUsername,
             telegram_name: telegramName,
-            telegram_username: telegramUsername,          
             pet_name: petName,
             comfort,
             energy: Math.round(energy),
@@ -5263,8 +5263,8 @@ function TasksScreen({
 type FriendProfile = {
   id: string;
   username: string | null;
-  telegram_name: string | null;
   telegram_username: string | null;
+  telegram_name: string | null;
   pet_name: string;
   comfort: number;
   level: number;
@@ -5414,6 +5414,12 @@ const FRIEND_TEXT = {
 function getPlayerDisplayName(profile: FriendProfile | null | undefined) {
   if (!profile) return "TrustyPaws";
 
+  // Показываем в первую очередь обычное имя пользователя из Telegram.
+  // Например: "Shinobi Silent".
+  const telegramName = profile.telegram_name?.trim();
+  if (telegramName) return telegramName;
+
+  // Если Telegram-имя недоступно, используем @username.
   const telegramUsername = profile.telegram_username?.trim();
   if (telegramUsername) {
     return telegramUsername.startsWith("@")
@@ -5421,9 +5427,7 @@ function getPlayerDisplayName(profile: FriendProfile | null | undefined) {
       : `@${telegramUsername}`;
   }
 
-  const telegramName = profile.telegram_name?.trim();
-  if (telegramName) return telegramName;
-
+  // Последний запасной вариант — внутренний TP-ID.
   return profile.username?.trim() || "TrustyPaws";
 }
 
@@ -5530,7 +5534,7 @@ function FriendsScreen({
         const { data: profilesData, error: profilesError } = await supabase
           .from("profiles")
           .select(
-            "telegram_username,id,username,telegram_name,pet_name,comfort,level,is_vip"
+            "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
           )
           .in("id", profileIds);
 
@@ -5582,7 +5586,7 @@ function FriendsScreen({
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "telegram_username,id,username,telegram_name,pet_name,comfort,level,is_vip"
+          "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
         )
         .order("comfort", { ascending: false })
         .order("updated_at", { ascending: true });
@@ -5641,7 +5645,7 @@ function FriendsScreen({
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "telegram_username,id,username,telegram_name,pet_name,comfort,level,is_vip"
+          "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
         )
         .eq("username", cleanCode)
         .maybeSingle();
