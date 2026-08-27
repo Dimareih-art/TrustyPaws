@@ -2005,8 +2005,8 @@ function App() {
           {
             id: userId,
             username,
-            telegram_username: telegramUsername,
             telegram_name: telegramName,
+            telegram_username: telegramUsername,          
             pet_name: petName,
             comfort,
             energy: Math.round(energy),
@@ -5263,8 +5263,8 @@ function TasksScreen({
 type FriendProfile = {
   id: string;
   username: string | null;
-  telegram_username: string | null;
   telegram_name: string | null;
+  telegram_username: string | null;
   pet_name: string;
   comfort: number;
   level: number;
@@ -5530,7 +5530,7 @@ function FriendsScreen({
         const { data: profilesData, error: profilesError } = await supabase
           .from("profiles")
           .select(
-            "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
+            "telegram_username,id,username,telegram_name,pet_name,comfort,level,is_vip"
           )
           .in("id", profileIds);
 
@@ -5582,7 +5582,7 @@ function FriendsScreen({
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
+          "telegram_username,id,username,telegram_name,pet_name,comfort,level,is_vip"
         )
         .order("comfort", { ascending: false })
         .order("updated_at", { ascending: true });
@@ -5641,7 +5641,7 @@ function FriendsScreen({
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
+          "telegram_username,id,username,telegram_name,pet_name,comfort,level,is_vip"
         )
         .eq("username", cleanCode)
         .maybeSingle();
