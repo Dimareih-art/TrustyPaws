@@ -36,6 +36,29 @@ type Background = {
   cost: number;
 };
 
+type TelegramUser = {
+  id?: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+function getTelegramUser(): TelegramUser | null {
+  const telegram = (
+    window as unknown as {
+      Telegram?: {
+        WebApp?: {
+          initDataUnsafe?: {
+            user?: TelegramUser;
+          };
+        };
+      };
+    }
+  ).Telegram?.WebApp;
+
+  return telegram?.initDataUnsafe?.user ?? null;
+}
+
 /* =====================================================
    CONSTANTS
 ===================================================== */
@@ -1160,7 +1183,7 @@ const ITEMS: Upgrade[] = [
     icon: "🧶",
     description:
       "Более уютный и красивый плед.",
-    cost: 7500,
+    cost: 10000,
     tapBonus: 3,
     passiveBonus: 0,
     sceneImage:
@@ -1175,7 +1198,7 @@ const ITEMS: Upgrade[] = [
     description:
       "Премиальный плед для настоящего уюта.",
     cost: 20000,
-    tapBonus: 5,
+    tapBonus: 4,
     passiveBonus: 0,
     sceneImage:
       assetUrl("scene/blanket-4.png"),
@@ -1188,8 +1211,8 @@ const ITEMS: Upgrade[] = [
     icon: "🥣",
     description:
       "Своя миска — ещё один шаг к нормальной жизни.",
-    cost: 1500,
-    tapBonus: 2,
+    cost: 2500,
+    tapBonus: 1,
     passiveBonus: 0,
     sceneImage:
       assetUrl("scene/bowl.png"),
@@ -1203,7 +1226,7 @@ const ITEMS: Upgrade[] = [
     description:
       "Удобная миска с более приятным дизайном.",
     cost: 5000,
-    tapBonus: 3,
+    tapBonus: 2,
     passiveBonus: 0,
     sceneImage:
       assetUrl("scene/bowl-2.png"),
@@ -1217,7 +1240,7 @@ const ITEMS: Upgrade[] = [
     description:
       "Красивая миска для ухоженного питомца.",
     cost: 15000,
-    tapBonus: 5,
+    tapBonus: 3,
     passiveBonus: 0,
     sceneImage:
       assetUrl("scene/bowl-3.png"),
@@ -1231,7 +1254,7 @@ const ITEMS: Upgrade[] = [
     description:
       "Премиальная миска для счастливого котика.",
     cost: 40000,
-    tapBonus: 7,
+    tapBonus: 4,
     passiveBonus: 0,
     sceneImage:
       assetUrl("scene/bowl-4.png"),
@@ -1246,9 +1269,9 @@ const HOUSES: Upgrade[] = [
     icon: "🏠",
     description:
       "Первый настоящий домик для питомца.",
-    cost: 50000,
+    cost: 25000,
     tapBonus: 3,
-    passiveBonus: 2,
+    passiveBonus: 3,
     sceneImage:
       assetUrl("scene/house-1.png"),
   },
@@ -1259,9 +1282,9 @@ const HOUSES: Upgrade[] = [
     icon: "🏡",
     description:
       "Больше места, тепла и комфорта.",
-    cost: 125500,
+    cost: 125100,
     tapBonus: 5,
-    passiveBonus: 4,
+    passiveBonus: 5,
     sceneImage:
       assetUrl("scene/house-2.png"),
   },
@@ -1273,8 +1296,8 @@ const HOUSES: Upgrade[] = [
     description:
       "Большой уютный дом для счастливого котика.",
     cost: 500000,
-    tapBonus: 8,
-    passiveBonus: 8,
+    tapBonus: 5,
+    passiveBonus: 5,
     sceneImage:
       assetUrl("scene/house-3.png"),
   },
@@ -1285,9 +1308,9 @@ const HOUSES: Upgrade[] = [
     icon: "🏰",
     description:
       "Роскошное место для отдыха.",
-    cost: 700000,
-    tapBonus: 12,
-    passiveBonus: 12,
+    cost: 800000,
+    tapBonus: 11,
+    passiveBonus: 11,
     sceneImage:
       assetUrl("scene/house-4.png"),
   },
@@ -1298,9 +1321,9 @@ const HOUSES: Upgrade[] = [
     icon: "🏯",
     description:
       "Почти настоящий кошачий дворец.",
-    cost: 950000,
-    tapBonus: 18,
-    passiveBonus: 18,
+    cost: 1250000,
+    tapBonus: 15,
+    passiveBonus: 15,
     sceneImage:
       assetUrl("scene/house-5.png"),
   },
@@ -1311,9 +1334,9 @@ const HOUSES: Upgrade[] = [
     icon: "🏰",
     description:
       "Лучший дом, который может получить котик.",
-    cost: 1300000,
-    tapBonus: 30,
-    passiveBonus: 25,
+    cost: 2500000,
+    tapBonus: 20,
+    passiveBonus: 30,
     sceneImage:
       assetUrl("scene/villa.png"),
   },
@@ -1963,6 +1986,17 @@ function App() {
         .slice(0, 8)
         .toUpperCase()}`;
 
+      const telegramUser = getTelegramUser();
+
+      const telegramUsername =
+        telegramUser?.username?.trim() || null;
+
+      const telegramName =
+        [telegramUser?.first_name, telegramUser?.last_name]
+          .filter((value): value is string => Boolean(value?.trim()))
+          .join(" ")
+          .trim() || null;
+
       const level = 1 + purchased.length;
 
       const { error } = await supabase
@@ -1971,6 +2005,8 @@ function App() {
           {
             id: userId,
             username,
+            telegram_username: telegramUsername,
+            telegram_name: telegramName,
             pet_name: petName,
             comfort,
             energy: Math.round(energy),
@@ -5221,15 +5257,18 @@ function TasksScreen({
 }
 
 /* =====================================================
-   FRIENDS
+   FRIENDS + LEADERBOARD
 ===================================================== */
 
 type FriendProfile = {
   id: string;
   username: string | null;
+  telegram_username: string | null;
+  telegram_name: string | null;
   pet_name: string;
   comfort: number;
   level: number;
+  is_vip?: boolean | null;
 };
 
 type FriendRequestRow = {
@@ -5247,9 +5286,20 @@ type FriendshipRow = {
   created_at: string;
 };
 
+type SocialSection = "friends" | "leaderboard";
+
 const FRIEND_TEXT = {
   ru: {
     subtitle: "Находи игроков TrustyPaws и заботьтесь о питомцах вместе",
+    friendsTab: "Друзья",
+    leaderboardTab: "Рейтинг",
+    leaderboardTitle: "РЕЙТИНГ ИГРОКОВ",
+    leaderboardSubtitle: "Место определяется по общему количеству Уюта",
+    leaderboardEmpty: "В рейтинге пока нет игроков",
+    leaderboardError: "Не удалось загрузить рейтинг",
+    yourPlace: "Твоё место",
+    you: "Ты",
+    refresh: "Обновить",
     yourId: "ТВОЙ ID ИГРОКА",
     copy: "Копировать",
     copied: "Скопировано",
@@ -5281,6 +5331,15 @@ const FRIEND_TEXT = {
   },
   en: {
     subtitle: "Find TrustyPaws players and take care of your pets together",
+    friendsTab: "Friends",
+    leaderboardTab: "Ranking",
+    leaderboardTitle: "PLAYER RANKING",
+    leaderboardSubtitle: "Rank is based on total Comfort",
+    leaderboardEmpty: "There are no players in the ranking yet",
+    leaderboardError: "Couldn't load the ranking",
+    yourPlace: "Your place",
+    you: "You",
+    refresh: "Refresh",
     yourId: "YOUR PLAYER ID",
     copy: "Copy",
     copied: "Copied",
@@ -5312,6 +5371,15 @@ const FRIEND_TEXT = {
   },
   ua: {
     subtitle: "Знаходь гравців TrustyPaws і піклуйтеся про улюбленців разом",
+    friendsTab: "Друзі",
+    leaderboardTab: "Рейтинг",
+    leaderboardTitle: "РЕЙТИНГ ГРАВЦІВ",
+    leaderboardSubtitle: "Місце визначається за загальною кількістю Затишку",
+    leaderboardEmpty: "У рейтингу поки немає гравців",
+    leaderboardError: "Не вдалося завантажити рейтинг",
+    yourPlace: "Твоє місце",
+    you: "Ти",
+    refresh: "Оновити",
     yourId: "ТВІЙ ID ГРАВЦЯ",
     copy: "Копіювати",
     copied: "Скопійовано",
@@ -5343,6 +5411,22 @@ const FRIEND_TEXT = {
   },
 } as const;
 
+function getPlayerDisplayName(profile: FriendProfile | null | undefined) {
+  if (!profile) return "TrustyPaws";
+
+  const telegramUsername = profile.telegram_username?.trim();
+  if (telegramUsername) {
+    return telegramUsername.startsWith("@")
+      ? telegramUsername
+      : `@${telegramUsername}`;
+  }
+
+  const telegramName = profile.telegram_name?.trim();
+  if (telegramName) return telegramName;
+
+  return profile.username?.trim() || "TrustyPaws";
+}
+
 function FriendsScreen({
   t,
   language,
@@ -5362,6 +5446,8 @@ function FriendsScreen({
 }) {
   const ft = FRIEND_TEXT[language];
 
+  const [socialSection, setSocialSection] =
+    useState<SocialSection>("friends");
   const [searchValue, setSearchValue] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<FriendProfile | null>(null);
@@ -5378,6 +5464,10 @@ function FriendsScreen({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [errorText, setErrorText] = useState("");
+
+  const [leaderboard, setLeaderboard] = useState<FriendProfile[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState("");
 
   const playerCode = useMemo(() => {
     if (!userId) return "TP-........";
@@ -5439,7 +5529,9 @@ function FriendsScreen({
       if (profileIds.length > 0) {
         const { data: profilesData, error: profilesError } = await supabase
           .from("profiles")
-          .select("id,username,pet_name,comfort,level")
+          .select(
+            "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
+          )
           .in("id", profileIds);
 
         if (profilesError) throw profilesError;
@@ -5480,11 +5572,43 @@ function FriendsScreen({
     }
   };
 
+  const loadLeaderboard = async () => {
+    if (!userId) return;
+
+    setLeaderboardLoading(true);
+    setLeaderboardError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(
+          "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
+        )
+        .order("comfort", { ascending: false })
+        .order("updated_at", { ascending: true });
+
+      if (error) throw error;
+
+      setLeaderboard((data ?? []) as FriendProfile[]);
+    } catch (error) {
+      console.error("TrustyPaws leaderboard loading error:", error);
+      setLeaderboardError(ft.leaderboardError);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!supabaseReady || !userId) return;
 
     void loadFriendsData();
   }, [supabaseReady, userId]);
+
+  useEffect(() => {
+    if (!supabaseReady || !userId || socialSection !== "leaderboard") return;
+
+    void loadLeaderboard();
+  }, [supabaseReady, userId, socialSection]);
 
   const copyPlayerCode = async () => {
     try {
@@ -5516,7 +5640,9 @@ function FriendsScreen({
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,username,pet_name,comfort,level")
+        .select(
+          "id,username,telegram_username,telegram_name,pet_name,comfort,level,is_vip"
+        )
         .eq("username", cleanCode)
         .maybeSingle();
 
@@ -5590,7 +5716,6 @@ function FriendsScreen({
     setSearchMessage("");
 
     try {
-      // Старую отклонённую заявку удаляем, чтобы игрок мог отправить новую.
       const { error: deleteError } = await supabase
         .from("friend_requests")
         .delete()
@@ -5778,198 +5903,360 @@ function FriendsScreen({
     );
   }
 
+  const myRank = leaderboard.findIndex((profile) => profile.id === userId) + 1;
+
   return (
     <div className="page friends-page">
       <PageHeader
         eyebrow={t.community}
         title={t.friendsTitle}
         subtitle={ft.subtitle}
-        badge={`${friends.length}`}
+        badge={
+          socialSection === "friends"
+            ? `${friends.length}`
+            : `${leaderboard.length}`
+        }
       />
 
-      <section className="player-id-card">
-        <div className="player-id-icon">🐾</div>
-
-        <div className="player-id-main">
-          <span>{ft.yourId}</span>
-          <strong>{playerCode}</strong>
-        </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "8px",
+          marginBottom: "14px",
+        }}
+      >
+        <button
+          type="button"
+          className={socialSection === "friends" ? "primary-button" : "buy-button"}
+          onClick={() => setSocialSection("friends")}
+          style={{ minHeight: "44px" }}
+        >
+          👥 {ft.friendsTab}
+        </button>
 
         <button
           type="button"
-          className={`copy-player-id ${copied ? "copied" : ""}`}
-          onClick={copyPlayerCode}
+          className={socialSection === "leaderboard" ? "primary-button" : "buy-button"}
+          onClick={() => setSocialSection("leaderboard")}
+          style={{ minHeight: "44px" }}
         >
-          {copied ? `✓ ${ft.copied}` : `⧉ ${ft.copy}`}
+          🏆 {ft.leaderboardTab}
         </button>
-      </section>
-
-      <section className="friend-search-card">
-        <div className="friend-section-heading">
-          <span>🔎</span>
-          <strong>{ft.searchTitle}</strong>
-        </div>
-
-        <div className="friend-search-row">
-          <input
-            value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value.toUpperCase())}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void searchPlayer();
-            }}
-            placeholder={ft.searchPlaceholder}
-            maxLength={11}
-          />
-
-          <button
-            type="button"
-            onClick={() => void searchPlayer()}
-            disabled={searching || !searchValue.trim()}
-          >
-            {searching ? ft.searching : ft.search}
-          </button>
-        </div>
-
-        {searchMessage && (
-          <div className="friend-search-message">{searchMessage}</div>
-        )}
-
-        {searchResult && (
-          <FriendProfileCard
-            profile={searchResult}
-            formatNumber={formatNumber}
-            comfortLabel={ft.comfort}
-            levelLabel={ft.level}
-            petLabel={ft.pet}
-            unknownPet={ft.unknownPet}
-            action={
-              relationFor(searchResult.id) === "friend"
-                ? ft.alreadyFriend
-                : relationFor(searchResult.id) === "outgoing"
-                ? ft.pending
-                : relationFor(searchResult.id) === "incoming"
-                ? ft.incomingExists
-                : ft.add
-            }
-            actionDisabled={
-              relationFor(searchResult.id) !== "none" ||
-              busyId === searchResult.id
-            }
-            onAction={() => void sendFriendRequest(searchResult)}
-          />
-        )}
-      </section>
-
-      {errorText && <div className="friends-error">⚠️ {errorText}</div>}
-
-      <div className="friend-list-heading">
-        <span>{ft.incoming}</span>
-        <b>{incomingRequests.length}</b>
       </div>
 
-      <div className="friend-request-list">
-        {loading ? (
-          <FriendSkeleton />
-        ) : incomingRequests.length === 0 ? (
-          <div className="friends-empty-mini">📨 {ft.noIncoming}</div>
-        ) : (
-          incomingRequests.map((request) => (
-            <article className="friend-request-card" key={request.id}>
-              <FriendAvatar name={request.profile?.pet_name || request.profile?.username || "?"} />
+      {socialSection === "friends" ? (
+        <>
+          <section className="player-id-card">
+            <div className="player-id-icon">🐾</div>
 
-              <div className="friend-request-info">
-                <strong>{request.profile?.username ?? "TrustyPaws"}</strong>
-                <span>
-                  🐱 {request.profile?.pet_name || ft.unknownPet} · {ft.level} {request.profile?.level ?? 1}
-                </span>
-              </div>
+            <div className="player-id-main">
+              <span>{ft.yourId}</span>
+              <strong>{playerCode}</strong>
+            </div>
 
-              <div className="friend-request-actions">
-                <button
-                  type="button"
-                  className="friend-accept"
-                  disabled={busyId === request.sender_id}
-                  onClick={() => void acceptRequest(request)}
-                >
-                  ✓ {ft.accept}
-                </button>
+            <button
+              type="button"
+              className={`copy-player-id ${copied ? "copied" : ""}`}
+              onClick={copyPlayerCode}
+            >
+              {copied ? `✓ ${ft.copied}` : `⧉ ${ft.copy}`}
+            </button>
+          </section>
 
-                <button
-                  type="button"
-                  className="friend-decline"
-                  disabled={busyId === request.sender_id}
-                  onClick={() => void declineRequest(request)}
-                >
-                  × {ft.decline}
-                </button>
-              </div>
-            </article>
-          ))
-        )}
-      </div>
+          <section className="friend-search-card">
+            <div className="friend-section-heading">
+              <span>🔎</span>
+              <strong>{ft.searchTitle}</strong>
+            </div>
 
-      <div className="friend-list-heading friends-own-heading">
-        <span>{ft.myFriends}</span>
-        <b>{friends.length}</b>
-      </div>
+            <div className="friend-search-row">
+              <input
+                value={searchValue}
+                onChange={(event) =>
+                  setSearchValue(event.target.value.toUpperCase())
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void searchPlayer();
+                }}
+                placeholder={ft.searchPlaceholder}
+                maxLength={11}
+              />
 
-      <div className="friends-list">
-        {loading ? (
-          <FriendSkeleton />
-        ) : friends.length === 0 ? (
-          <div className="friends-empty-list">
-            <div>👥</div>
-            <strong>{ft.myFriends}</strong>
-            <p>{ft.noFriends}</p>
+              <button
+                type="button"
+                onClick={() => void searchPlayer()}
+                disabled={searching || !searchValue.trim()}
+              >
+                {searching ? ft.searching : ft.search}
+              </button>
+            </div>
+
+            {searchMessage && (
+              <div className="friend-search-message">{searchMessage}</div>
+            )}
+
+            {searchResult && (
+              <FriendProfileCard
+                profile={searchResult}
+                formatNumber={formatNumber}
+                comfortLabel={ft.comfort}
+                levelLabel={ft.level}
+                petLabel={ft.pet}
+                unknownPet={ft.unknownPet}
+                action={
+                  relationFor(searchResult.id) === "friend"
+                    ? ft.alreadyFriend
+                    : relationFor(searchResult.id) === "outgoing"
+                    ? ft.pending
+                    : relationFor(searchResult.id) === "incoming"
+                    ? ft.incomingExists
+                    : ft.add
+                }
+                actionDisabled={
+                  relationFor(searchResult.id) !== "none" ||
+                  busyId === searchResult.id
+                }
+                onAction={() => void sendFriendRequest(searchResult)}
+              />
+            )}
+          </section>
+
+          {errorText && <div className="friends-error">⚠️ {errorText}</div>}
+
+          <div className="friend-list-heading">
+            <span>{ft.incoming}</span>
+            <b>{incomingRequests.length}</b>
           </div>
-        ) : (
-          friends.map((friendship) => {
-            const profile = friendship.profile;
-            const friendId =
-              friendship.user_id === userId
-                ? friendship.friend_id
-                : friendship.user_id;
 
-            return (
-              <article className="friend-card" key={friendship.id}>
-                <FriendAvatar name={profile?.pet_name || profile?.username || "?"} />
+          <div className="friend-request-list">
+            {loading ? (
+              <FriendSkeleton />
+            ) : incomingRequests.length === 0 ? (
+              <div className="friends-empty-mini">📨 {ft.noIncoming}</div>
+            ) : (
+              incomingRequests.map((request) => {
+                const displayName = getPlayerDisplayName(request.profile);
 
-                <div className="friend-card-main">
-                  <div className="friend-card-top">
-                    <div>
-                      <strong>{profile?.username ?? "TrustyPaws"}</strong>
-                      <span>🐱 {profile?.pet_name || ft.unknownPet}</span>
+                return (
+                  <article className="friend-request-card" key={request.id}>
+                    <FriendAvatar
+                      name={displayName || request.profile?.pet_name || "?"}
+                    />
+
+                    <div className="friend-request-info">
+                      <strong>
+                        {displayName}
+                        {request.profile?.is_vip ? " 👑" : ""}
+                      </strong>
+                      <span>
+                        🐱 {request.profile?.pet_name || ft.unknownPet} · {ft.level}{" "}
+                        {request.profile?.level ?? 1}
+                      </span>
                     </div>
 
-                    <span className="friend-level">LVL {profile?.level ?? 1}</span>
-                  </div>
+                    <div className="friend-request-actions">
+                      <button
+                        type="button"
+                        className="friend-accept"
+                        disabled={busyId === request.sender_id}
+                        onClick={() => void acceptRequest(request)}
+                      >
+                        ✓ {ft.accept}
+                      </button>
 
-                  <div className="friend-comfort">
-                    <span>🐾 {ft.comfort}</span>
-                    <strong>{formatNumber(profile?.comfort ?? 0)}</strong>
-                  </div>
-                </div>
+                      <button
+                        type="button"
+                        className="friend-decline"
+                        disabled={busyId === request.sender_id}
+                        onClick={() => void declineRequest(request)}
+                      >
+                        × {ft.decline}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
 
-                <button
-                  type="button"
-                  className="remove-friend-button"
-                  disabled={busyId === friendId}
-                  onClick={() => void removeFriend(friendship)}
-                  title={ft.remove}
-                >
-                  ×
-                </button>
-              </article>
-            );
-          })
-        )}
-      </div>
+          <div className="friend-list-heading friends-own-heading">
+            <span>{ft.myFriends}</span>
+            <b>{friends.length}</b>
+          </div>
+
+          <div className="friends-list">
+            {loading ? (
+              <FriendSkeleton />
+            ) : friends.length === 0 ? (
+              <div className="friends-empty-list">
+                <div>👥</div>
+                <strong>{ft.myFriends}</strong>
+                <p>{ft.noFriends}</p>
+              </div>
+            ) : (
+              friends.map((friendship) => {
+                const profile = friendship.profile;
+                const friendId =
+                  friendship.user_id === userId
+                    ? friendship.friend_id
+                    : friendship.user_id;
+                const displayName = getPlayerDisplayName(profile);
+
+                return (
+                  <article className="friend-card" key={friendship.id}>
+                    <FriendAvatar
+                      name={displayName || profile?.pet_name || "?"}
+                    />
+
+                    <div className="friend-card-main">
+                      <div className="friend-card-top">
+                        <div>
+                          <strong>
+                            {displayName}
+                            {profile?.is_vip ? " 👑" : ""}
+                          </strong>
+                          <span>🐱 {profile?.pet_name || ft.unknownPet}</span>
+                        </div>
+
+                        <span className="friend-level">
+                          LVL {profile?.level ?? 1}
+                        </span>
+                      </div>
+
+                      <div className="friend-comfort">
+                        <span>🐾 {ft.comfort}</span>
+                        <strong>{formatNumber(profile?.comfort ?? 0)}</strong>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="remove-friend-button"
+                      disabled={busyId === friendId}
+                      onClick={() => void removeFriend(friendship)}
+                      title={ft.remove}
+                    >
+                      ×
+                    </button>
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <section className="friend-search-card">
+            <div className="friend-section-heading">
+              <span>🏆</span>
+              <strong>{ft.leaderboardTitle}</strong>
+            </div>
+
+            <p style={{ margin: "6px 0 12px", opacity: 0.7, fontSize: "12px" }}>
+              {ft.leaderboardSubtitle}
+            </p>
+
+            {myRank > 0 && (
+              <div
+                className="friend-search-message"
+                style={{ marginBottom: "10px" }}
+              >
+                🐾 {ft.yourPlace}: <strong>#{myRank}</strong>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="copy-player-id"
+              disabled={leaderboardLoading}
+              onClick={() => void loadLeaderboard()}
+              style={{ width: "100%" }}
+            >
+              {leaderboardLoading ? "…" : `↻ ${ft.refresh}`}
+            </button>
+          </section>
+
+          {leaderboardError && (
+            <div className="friends-error">⚠️ {leaderboardError}</div>
+          )}
+
+          <div className="friends-list">
+            {leaderboardLoading ? (
+              <FriendSkeleton />
+            ) : leaderboard.length === 0 ? (
+              <div className="friends-empty-list">
+                <div>🏆</div>
+                <strong>{ft.leaderboardTitle}</strong>
+                <p>{ft.leaderboardEmpty}</p>
+              </div>
+            ) : (
+              leaderboard.map((profile, index) => {
+                const place = index + 1;
+                const isCurrentPlayer = profile.id === userId;
+                const displayName = getPlayerDisplayName(profile);
+                const placeLabel =
+                  place === 1
+                    ? "🥇"
+                    : place === 2
+                    ? "🥈"
+                    : place === 3
+                    ? "🥉"
+                    : `#${place}`;
+
+                return (
+                  <article
+                    className="friend-card"
+                    key={profile.id}
+                    style={
+                      isCurrentPlayer
+                        ? {
+                            outline: "2px solid rgba(255, 255, 255, 0.18)",
+                            transform: "translateZ(0)",
+                          }
+                        : undefined
+                    }
+                  >
+                    <div
+                      className="friend-avatar"
+                      style={{ fontSize: place <= 3 ? "20px" : "13px" }}
+                    >
+                      {placeLabel}
+                    </div>
+
+                    <div className="friend-card-main">
+                      <div className="friend-card-top">
+                        <div>
+                          <strong>
+                            {displayName}
+                            {profile.is_vip ? " 👑" : ""}
+                            {isCurrentPlayer ? ` · ${ft.you}` : ""}
+                          </strong>
+                          <span>🐱 {profile.pet_name || ft.unknownPet}</span>
+                        </div>
+
+                        <span className="friend-level">LVL {profile.level ?? 1}</span>
+                      </div>
+
+                      <div className="friend-comfort">
+                        <span>🐾 {ft.comfort}</span>
+                        <strong>{formatNumber(profile.comfort ?? 0)}</strong>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 function FriendAvatar({ name }: { name: string }) {
-  const letter = name.trim().charAt(0).toUpperCase() || "🐾";
+  const normalized = name.replace(/^@/, "").trim();
+  const letter = normalized.charAt(0).toUpperCase() || "🐾";
 
   return <div className="friend-avatar">{letter}</div>;
 }
@@ -5995,15 +6282,21 @@ function FriendProfileCard({
   actionDisabled: boolean;
   onAction: () => void;
 }) {
+  const displayName = getPlayerDisplayName(profile);
+
   return (
     <article className="friend-search-result">
-      <FriendAvatar name={profile.pet_name || profile.username || "?"} />
+      <FriendAvatar name={displayName || profile.pet_name || "?"} />
 
       <div className="friend-search-result-main">
-        <strong>{profile.username ?? "TrustyPaws"}</strong>
+        <strong>
+          {displayName}
+          {profile.is_vip ? " 👑" : ""}
+        </strong>
         <span>🐱 {petLabel}: {profile.pet_name || unknownPet}</span>
         <small>
-          {levelLabel} {profile.level} · 🐾 {comfortLabel}: {formatNumber(profile.comfort)}
+          {levelLabel} {profile.level} · 🐾 {comfortLabel}:{" "}
+          {formatNumber(profile.comfort)}
         </small>
       </div>
 
