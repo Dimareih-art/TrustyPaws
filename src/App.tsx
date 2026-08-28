@@ -36,6 +36,17 @@ type Background = {
   cost: number;
 };
 
+type PetRarity = "starter" | "common" | "rare";
+
+type Pet = {
+  id: string;
+  name: string;
+  image: string;
+  rarity: PetRarity;
+  comfortCost?: number;
+  starsCost?: number;
+};
+
 type TelegramUser = {
   id?: number;
   username?: string;
@@ -256,6 +267,12 @@ const PASSIVE_TIMESTAMP_KEY =
 
 const LANGUAGE_STORAGE_KEY =
   "trusty_language";
+
+const PURCHASED_PETS_STORAGE_KEY =
+  "trusty_purchased_pets";
+
+const SELECTED_PET_STORAGE_KEY =
+  "trusty_selected_pet";
 
 const assetUrl = (path: string) =>
   `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
@@ -1416,6 +1433,93 @@ const ITEMS: Upgrade[] = [
   },
 ];
 
+const PETS: Pet[] = [
+  {
+    id: "default",
+    name: "Trusty",
+    image: assetUrl("cat-3d.png"),
+    rarity: "starter",
+    comfortCost: 0,
+  },
+  {
+    id: "ginger",
+    name: "Рыжик",
+    image: assetUrl("pets/ginger.png"),
+    rarity: "common",
+    comfortCost: 50000,
+  },
+  {
+    id: "black",
+    name: "Черныш",
+    image: assetUrl("pets/black.png"),
+    rarity: "common",
+    comfortCost: 75000,
+  },
+  {
+    id: "white",
+    name: "Снежок",
+    image: assetUrl("pets/white.png"),
+    rarity: "common",
+    comfortCost: 100000,
+  },
+  {
+    id: "gray-fold",
+    name: "Дымок",
+    image: assetUrl("pets/gray-fold.png"),
+    rarity: "common",
+    comfortCost: 150000,
+  },
+  {
+    id: "siamese",
+    name: "Сиамский",
+    image: assetUrl("pets/siamese.png"),
+    rarity: "common",
+    comfortCost: 200000,
+  },
+  {
+    id: "sphynx",
+    name: "Сфинкс",
+    image: assetUrl("pets/sphynx.png"),
+    rarity: "common",
+    comfortCost: 250000,
+  },
+  {
+    id: "cosmo",
+    name: "Космо",
+    image: assetUrl("pets/cosmo.png"),
+    rarity: "rare",
+    starsCost: 299,
+  },
+  {
+    id: "frost",
+    name: "Мороз",
+    image: assetUrl("pets/frost.png"),
+    rarity: "rare",
+    starsCost: 299,
+  },
+  {
+    id: "sakura",
+    name: "Сакура",
+    image: assetUrl("pets/sakura.png"),
+    rarity: "rare",
+    starsCost: 299,
+  },
+  {
+    id: "luna",
+    name: "Луна",
+    image: assetUrl("pets/luna.png"),
+    rarity: "rare",
+    starsCost: 299,
+  },
+  {
+    id: "golden",
+    name: "Золотой",
+    image: assetUrl("pets/golden.png"),
+    rarity: "rare",
+    starsCost: 299,
+  },
+];
+
 const HOUSES: Upgrade[] = [
   {
     id: "house1",
@@ -1780,6 +1884,28 @@ function App() {
     )
   );
 
+  const [purchasedPets, setPurchasedPets] =
+    useState<string[]>(() => {
+      const stored = getStoredArray(
+        PURCHASED_PETS_STORAGE_KEY
+      );
+
+      return stored.includes("default")
+        ? stored
+        : ["default", ...stored];
+    });
+
+  const [selectedPet, setSelectedPet] =
+    useState(() =>
+      getStoredString(
+        SELECTED_PET_STORAGE_KEY,
+        "default"
+      )
+    );
+
+  const [petsLoaded, setPetsLoaded] =
+    useState(false);
+
   const [dailyAvailable, setDailyAvailable] =
     useState(() =>
       getStoredBoolean(
@@ -1902,6 +2028,9 @@ function App() {
     useState(false);
 
   const [vipActive, setVipActive] =
+    useState(false);
+
+  const [vipStatusLoaded, setVipStatusLoaded] =
     useState(false);
 
   const [, setVipExpiresAt] =
@@ -2057,6 +2186,7 @@ function App() {
     if (!supabaseReady || !userId) {
       setVipActive(false);
       setVipExpiresAt(null);
+      setVipStatusLoaded(false);
       return;
     }
 
@@ -2085,6 +2215,7 @@ function App() {
 
       setVipActive(active);
       setVipExpiresAt(expiresAt);
+      setVipStatusLoaded(true);
     };
 
     void loadVipStatus();
@@ -2372,6 +2503,87 @@ function App() {
     (vipActive ? VIP_TAP_BONUS : 0);
 
   /* ===================================================
+     PETS FROM SUPABASE
+
+     Supabase является главным источником данных по
+     купленным и выбранному питомцу. localStorage остаётся
+     только локальным кэшем для интерфейса.
+  =================================================== */
+
+  useEffect(() => {
+    if (!supabaseReady || !userId) {
+      setPetsLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadPets = async () => {
+      setPetsLoaded(false);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("purchased_pets,selected_pet")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error(
+          "TrustyPaws pets loading error:",
+          error
+        );
+
+        if (!cancelled) {
+          setPurchasedPets(["default"]);
+          setSelectedPet("default");
+          setPetsLoaded(true);
+        }
+
+        return;
+      }
+
+      if (cancelled) return;
+
+      const validPetIds = new Set(
+        PETS.map((pet) => pet.id)
+      );
+
+      const serverPets = Array.isArray(data?.purchased_pets)
+        ? data.purchased_pets.filter(
+            (value): value is string =>
+              typeof value === "string" &&
+              validPetIds.has(value)
+          )
+        : [];
+
+      const normalizedPets = Array.from(
+        new Set(["default", ...serverPets])
+      );
+
+      const serverSelected =
+        typeof data?.selected_pet === "string"
+          ? data.selected_pet
+          : "default";
+
+      const normalizedSelected =
+        normalizedPets.includes(serverSelected) &&
+        validPetIds.has(serverSelected)
+          ? serverSelected
+          : "default";
+
+      setPurchasedPets(normalizedPets);
+      setSelectedPet(normalizedSelected);
+      setPetsLoaded(true);
+    };
+
+    void loadPets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabaseReady, userId]);
+
+  /* ===================================================
      SUPABASE PROFILE SYNC
 
      Сохраняем игровой профиль в облако с небольшой
@@ -2379,7 +2591,7 @@ function App() {
   =================================================== */
 
   useEffect(() => {
-    if (!supabaseReady || !userId) {
+    if (!supabaseReady || !userId || !petsLoaded) {
       return;
     }
 
@@ -2418,6 +2630,8 @@ function App() {
             selected_background: selectedBackground,
             purchased,
             purchased_backgrounds: purchasedBackgrounds,
+            purchased_pets: purchasedPets,
+            selected_pet: selectedPet,
             updated_at: new Date().toISOString(),
           },
           {
@@ -2452,6 +2666,9 @@ function App() {
     purchased,
     purchasedBackgrounds,
     selectedBackground,
+    purchasedPets,
+    selectedPet,
+    petsLoaded,
   ]);
 
   /* ===================================================
@@ -2487,6 +2704,20 @@ function App() {
       )
     );
   }, [purchasedBackgrounds]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      PURCHASED_PETS_STORAGE_KEY,
+      JSON.stringify(purchasedPets)
+    );
+  }, [purchasedPets]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      SELECTED_PET_STORAGE_KEY,
+      selectedPet
+    );
+  }, [selectedPet]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -2703,6 +2934,10 @@ function App() {
   =================================================== */
 
   useEffect(() => {
+    if (!vipStatusLoaded) {
+      return;
+    }
+
     const timer =
       window.setInterval(() => {
         const now =
@@ -2753,13 +2988,17 @@ function App() {
       window.clearInterval(
         timer
       );
-  }, [energy, maxEnergy]);
+  }, [energy, maxEnergy, vipStatusLoaded]);
 
   /* ===================================================
      ENERGY VISIBILITY
   =================================================== */
 
   useEffect(() => {
+    if (!vipStatusLoaded) {
+      return;
+    }
+
     const syncEnergy = () => {
       const now =
         Date.now();
@@ -2831,10 +3070,10 @@ function App() {
         handleVisibility
       );
     };
-  }, [energy, maxEnergy]);
+  }, [energy, maxEnergy, vipStatusLoaded]);
 
   useEffect(() => {
-  if (!supabaseReady || !userId) {
+  if (!supabaseReady || !userId || !vipStatusLoaded) {
     return;
   }
 
@@ -2870,7 +3109,7 @@ function App() {
     ENERGY_TIMESTAMP_KEY,
     String(result.timestamp)
   );
-}, [maxEnergy, supabaseReady, userId]);
+}, [maxEnergy, supabaseReady, userId, vipStatusLoaded]);
 
   /* ===================================================
      PASSIVE INCOME
@@ -3317,6 +3556,38 @@ function App() {
     setOneTimeFriend10Claimed(true);
   };
 
+  const buyComfortPet = (pet: Pet) => {
+    if (
+      pet.rarity !== "common" ||
+      purchasedPets.includes(pet.id) ||
+      typeof pet.comfortCost !== "number" ||
+      comfort < pet.comfortCost
+    ) {
+      return;
+    }
+
+    setComfort((value) =>
+      Math.max(0, value - pet.comfortCost!)
+    );
+
+    setPurchasedPets((current) =>
+      current.includes(pet.id)
+        ? current
+        : [...current, pet.id]
+    );
+  };
+
+  const selectPet = (pet: Pet) => {
+    if (!purchasedPets.includes(pet.id)) {
+      return;
+    }
+
+    setSelectedPet(pet.id);
+  };
+
+  const selectedPetData =
+    PETS.find((pet) => pet.id === selectedPet) ?? PETS[0];
+
   /* ===================================================
      RESET
   =================================================== */
@@ -3337,6 +3608,8 @@ function App() {
       setPetCount(0);
 
       setPurchased([]);
+      setPurchasedPets(["default"]);
+      setSelectedPet("default");
 
       setPurchasedBackgrounds(
         ["background-0"]
@@ -4038,6 +4311,9 @@ const formatTime = (
               selectedBackground={
                 selectedBackground
               }
+              selectedPetImage={
+                selectedPetData.image
+              }
               tapAnimation={
                 tapAnimation
               }
@@ -4176,6 +4452,13 @@ const formatTime = (
               t={t}
               language={language}
               userId={userId}
+              comfort={comfort}
+              purchasedPets={purchasedPets}
+              selectedPet={selectedPet}
+              onBuyComfortPet={buyComfortPet}
+              onSelectPet={selectPet}
+              onPurchasedPetsChange={setPurchasedPets}
+              formatNumber={formatNumber}
               supabaseReady={
                 supabaseReady
               }
@@ -4574,6 +4857,7 @@ function HomeScreen({
   passivePerMinute,
   purchased,
   selectedBackground,
+  selectedPetImage,
   tapAnimation,
   rewardValue,
   showReward,
@@ -4597,6 +4881,7 @@ function HomeScreen({
   passivePerMinute: number;
   purchased: string[];
   selectedBackground: string;
+  selectedPetImage: string;
   tapAnimation: number;
   rewardValue: number;
   showReward: boolean;
@@ -4945,7 +5230,7 @@ function HomeScreen({
           >
 
             <img
-              src={assetUrl("cat-3d.png")}
+              src={selectedPetImage}
               alt={petName}
               className="cat-image"
               draggable="false"
@@ -7276,12 +7561,26 @@ function ShopScreen({
   t,
   language,
   userId,
+  comfort,
+  purchasedPets,
+  selectedPet,
+  onBuyComfortPet,
+  onSelectPet,
+  onPurchasedPetsChange,
+  formatNumber,
   supabaseReady,
   onVipStatusChange,
 }: {
   t: Translation;
   language: Language;
   userId: string | null;
+  comfort: number;
+  purchasedPets: string[];
+  selectedPet: string;
+  onBuyComfortPet: (pet: Pet) => void;
+  onSelectPet: (pet: Pet) => void;
+  onPurchasedPetsChange: (pets: string[]) => void;
+  formatNumber: (value: number) => string;
   supabaseReady: boolean;
   onVipStatusChange: (active: boolean, expiresAt: string | null) => void;
 }) {
@@ -7303,6 +7602,12 @@ function ShopScreen({
   const [shopSection, setShopSection] =
     useState<"accessories" | "pets" | "statuses">("statuses");
 
+  const [petShopMessage, setPetShopMessage] =
+    useState("");
+
+  const [petBuyingId, setPetBuyingId] =
+    useState<string | null>(null);
+
   const shopText =
     language === "en"
       ? {
@@ -7311,7 +7616,23 @@ function ShopScreen({
           statuses: "Statuses",
           comingTitle: "Coming in future updates",
           accessoriesDescription: "New accessories and cosmetic items for your pet will appear here.",
-          petsDescription: "New pets will appear here in future updates.",
+          petsDescription: "Choose and collect new TrustyPaws pets.",
+          commonPets: "COMMON",
+          rarePets: "RARE",
+          ownedPet: "Owned",
+          selectedPet: "Selected",
+          choosePet: "Choose",
+          buyPet: "Buy",
+          starterPet: "Starter pet",
+          telegramOnly: "Available in Telegram",
+          notEnoughComfort: "Not enough Comfort",
+          petBuying: "Preparing payment...",
+          petPaid: "Payment received. Unlocking pet...",
+          petActivated: "Pet unlocked successfully! 🐱",
+          petPending: "Payment is processing. The pet will appear shortly.",
+          petCancelled: "Payment cancelled.",
+          petFailed: "Payment failed. Stars were not charged.",
+          petInvoiceError: "Could not create the Telegram Stars invoice.",
         }
       : language === "ua"
       ? {
@@ -7320,7 +7641,23 @@ function ShopScreen({
           statuses: "Статуси",
           comingTitle: "Очікується в нових оновленнях",
           accessoriesDescription: "Тут з’являться нові аксесуари та косметичні предмети для улюбленця.",
-          petsDescription: "У майбутніх оновленнях тут з’являться нові улюбленці.",
+          petsDescription: "Обирай та збирай нових улюбленців TrustyPaws.",
+          commonPets: "ЗВИЧАЙНІ",
+          rarePets: "РІДКІСНІ",
+          ownedPet: "Придбано",
+          selectedPet: "Обрано",
+          choosePet: "Обрати",
+          buyPet: "Купити",
+          starterPet: "Стартовий улюбленець",
+          telegramOnly: "Доступно в Telegram",
+          notEnoughComfort: "Недостатньо Затишку",
+          petBuying: "Готуємо оплату...",
+          petPaid: "Оплату отримано. Відкриваємо улюбленця...",
+          petActivated: "Улюбленця успішно відкрито! 🐱",
+          petPending: "Платіж обробляється. Улюбленець скоро з’явиться.",
+          petCancelled: "Оплату скасовано.",
+          petFailed: "Оплата не пройшла. Stars не списані.",
+          petInvoiceError: "Не вдалося створити рахунок Telegram Stars.",
         }
       : {
           accessories: "Аксессуары",
@@ -7328,7 +7665,23 @@ function ShopScreen({
           statuses: "Статусы",
           comingTitle: "Ожидается в новых обновлениях",
           accessoriesDescription: "Здесь появятся новые аксессуары и косметические предметы для питомца.",
-          petsDescription: "В будущих обновлениях здесь появятся новые питомцы.",
+          petsDescription: "Выбирай и собирай новых питомцев TrustyPaws.",
+          commonPets: "ОБЫЧНЫЕ",
+          rarePets: "РЕДКИЕ",
+          ownedPet: "Куплено",
+          selectedPet: "Выбран",
+          choosePet: "Выбрать",
+          buyPet: "Купить",
+          starterPet: "Стартовый питомец",
+          telegramOnly: "Доступно в Telegram",
+          notEnoughComfort: "Недостаточно Комфорта",
+          petBuying: "Подготавливаем оплату...",
+          petPaid: "Оплата получена. Открываем питомца...",
+          petActivated: "Питомец успешно открыт! 🐱",
+          petPending: "Платёж обрабатывается. Питомец скоро появится.",
+          petCancelled: "Оплата отменена.",
+          petFailed: "Оплата не прошла. Stars не списаны.",
+          petInvoiceError: "Не удалось создать счёт Telegram Stars.",
         };
 
   const vipText =
@@ -7426,6 +7779,142 @@ function ShopScreen({
           statusError:
             "Не удалось обновить VIP-статус.",
         };
+
+  const refreshPetAfterPayment = async (petId: string) => {
+    if (!userId) {
+      return false;
+    }
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 750);
+      });
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("purchased_pets")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("TrustyPaws pet refresh error:", error);
+        continue;
+      }
+
+      const pets = Array.isArray(data?.purchased_pets)
+        ? data.purchased_pets.filter(
+            (value: unknown): value is string => typeof value === "string"
+          )
+        : ["default"];
+
+      if (pets.includes(petId)) {
+        onPurchasedPetsChange(pets);
+        setPetShopMessage(shopText.petActivated);
+        return true;
+      }
+    }
+
+    setPetShopMessage(shopText.petPending);
+    return false;
+  };
+
+  const buyStarPet = async (pet: Pet) => {
+    if (
+      petBuyingId ||
+      pet.rarity !== "rare" ||
+      purchasedPets.includes(pet.id) ||
+      typeof pet.starsCost !== "number" ||
+      !supabaseReady ||
+      !userId
+    ) {
+      return;
+    }
+
+    setPetBuyingId(pet.id);
+    setPetShopMessage("");
+
+    let invoiceOpened = false;
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-pet-invoice",
+        {
+          body: {
+            userId,
+            petId: pet.id,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("TrustyPaws pet invoice function error:", error);
+        throw error;
+      }
+
+      const invoiceUrl = data?.invoiceUrl;
+
+      if (typeof invoiceUrl !== "string" || !invoiceUrl) {
+        throw new Error("Invoice URL missing");
+      }
+
+      const telegram = (
+        window as unknown as {
+          Telegram?: {
+            WebApp?: {
+              openInvoice?: (
+                url: string,
+                callback?: (status: string) => void
+              ) => void;
+              HapticFeedback?: {
+                impactOccurred?: (
+                  style: "light" | "medium" | "heavy"
+                ) => void;
+              };
+            };
+          };
+        }
+      ).Telegram?.WebApp;
+
+      if (!telegram?.openInvoice) {
+        setPetShopMessage(shopText.telegramOnly);
+        return;
+      }
+
+      telegram.HapticFeedback?.impactOccurred?.("medium");
+
+      invoiceOpened = true;
+
+      telegram.openInvoice(invoiceUrl, (status) => {
+        setPetBuyingId(null);
+
+        if (status === "paid") {
+          setPetShopMessage(shopText.petPaid);
+          void refreshPetAfterPayment(pet.id);
+          return;
+        }
+
+        if (status === "pending") {
+          setPetShopMessage(shopText.petPending);
+          void refreshPetAfterPayment(pet.id);
+          return;
+        }
+
+        if (status === "failed") {
+          setPetShopMessage(shopText.petFailed);
+          return;
+        }
+
+        setPetShopMessage(shopText.petCancelled);
+      });
+    } catch (error) {
+      console.error("TrustyPaws pet purchase error:", error);
+      setPetShopMessage(shopText.petInvoiceError);
+    } finally {
+      if (!invoiceOpened) {
+        setPetBuyingId(null);
+      }
+    }
+  };
 
   const formatVipDate = (
     value: string
@@ -7767,7 +8256,7 @@ function ShopScreen({
         </button>
       </div>
 
-      {shopSection !== "statuses" ? (
+      {shopSection === "accessories" ? (
         <section
           style={{
             padding: "28px 20px",
@@ -7777,17 +8266,298 @@ function ShopScreen({
             textAlign: "center",
           }}
         >
-          <div style={{ fontSize: "42px", marginBottom: "12px" }}>
-            {shopSection === "accessories" ? "🎀" : "🐱"}
-          </div>
+          <div style={{ fontSize: "42px", marginBottom: "12px" }}>🎀</div>
           <h3 style={{ margin: "0 0 8px", fontSize: "20px" }}>
             {shopText.comingTitle}
           </h3>
           <p style={{ margin: 0, opacity: 0.68, lineHeight: 1.55 }}>
-            {shopSection === "accessories"
-              ? shopText.accessoriesDescription
-              : shopText.petsDescription}
+            {shopText.accessoriesDescription}
           </p>
+        </section>
+      ) : shopSection === "pets" ? (
+        <section>
+          <div
+            style={{
+              marginBottom: "14px",
+              padding: "14px 16px",
+              borderRadius: "18px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.035)",
+            }}
+          >
+            <strong style={{ display: "block", marginBottom: "4px" }}>
+              🐱 {shopText.pets}
+            </strong>
+            <span style={{ fontSize: "12px", opacity: 0.66, lineHeight: 1.5 }}>
+              {shopText.petsDescription}
+            </span>
+          </div>
+
+          {petShopMessage && (
+            <div
+              style={{
+                marginBottom: "12px",
+                padding: "10px 12px",
+                borderRadius: "14px",
+                background: "rgba(255,210,85,0.09)",
+                border: "1px solid rgba(255,210,85,0.18)",
+                fontSize: "12px",
+                fontWeight: 800,
+                textAlign: "center",
+              }}
+            >
+              {petShopMessage}
+            </div>
+          )}
+
+          {[
+            { key: "common", title: shopText.commonPets },
+            { key: "rare", title: shopText.rarePets },
+          ].map((group) => {
+            const pets = PETS.filter((pet) =>
+              group.key === "common"
+                ? pet.rarity === "starter" || pet.rarity === "common"
+                : pet.rarity === "rare"
+            );
+
+            return (
+              <div key={group.key} style={{ marginBottom: "20px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "10px",
+                    fontSize: "11px",
+                    fontWeight: 900,
+                    letterSpacing: "0.11em",
+                    opacity: 0.78,
+                  }}
+                >
+                  <span>{group.title}</span>
+                  <span>{pets.length}</span>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                    gap: "10px",
+                  }}
+                >
+                  {pets.map((pet) => {
+                    const owned = purchasedPets.includes(pet.id);
+                    const selected = selectedPet === pet.id;
+                    const affordable =
+                      pet.rarity === "common" &&
+                      typeof pet.comfortCost === "number" &&
+                      comfort >= pet.comfortCost;
+
+                    return (
+                      <article
+                        key={pet.id}
+                        style={{
+                          minWidth: 0,
+                          overflow: "hidden",
+                          borderRadius: "18px",
+                          border: selected
+                            ? "1px solid rgba(255,211,91,0.48)"
+                            : pet.rarity === "rare"
+                            ? "1px solid rgba(151,111,255,0.25)"
+                            : "1px solid rgba(255,255,255,0.08)",
+                          background: pet.rarity === "rare"
+                            ? "linear-gradient(155deg, rgba(77,55,118,0.24), rgba(24,27,34,0.96))"
+                            : "rgba(255,255,255,0.035)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "relative",
+                            aspectRatio: "1 / 1",
+                            display: "grid",
+                            placeItems: "center",
+                            padding: "8px",
+                            background: pet.rarity === "rare"
+                              ? "radial-gradient(circle at 50% 35%, rgba(137,103,255,0.18), transparent 62%)"
+                              : "radial-gradient(circle at 50% 35%, rgba(255,255,255,0.07), transparent 64%)",
+                          }}
+                        >
+                          <img
+                            src={pet.image}
+                            alt={pet.name}
+                            draggable="false"
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "contain",
+                              filter: selected ? "drop-shadow(0 8px 14px rgba(255,202,66,0.18))" : undefined,
+                            }}
+                            onError={(event) => {
+                              const image = event.currentTarget;
+                              if (!image.dataset.fallback) {
+                                image.dataset.fallback = "true";
+                                image.src = assetUrl("cat-3d.png");
+                              }
+                            }}
+                          />
+
+                          <span
+                            style={{
+                              position: "absolute",
+                              top: "8px",
+                              left: "8px",
+                              padding: "4px 7px",
+                              borderRadius: "999px",
+                              background: pet.rarity === "rare"
+                                ? "rgba(123,81,220,0.72)"
+                                : "rgba(0,0,0,0.38)",
+                              fontSize: "8px",
+                              fontWeight: 900,
+                            }}
+                          >
+                            {pet.rarity === "rare"
+                              ? `✦ ${shopText.rarePets}`
+                              : pet.rarity === "starter"
+                              ? shopText.starterPet
+                              : shopText.commonPets}
+                          </span>
+                        </div>
+
+                        <div style={{ padding: "10px" }}>
+                          <strong
+                            style={{
+                              display: "block",
+                              marginBottom: "7px",
+                              fontSize: "14px",
+                            }}
+                          >
+                            {pet.name}
+                          </strong>
+
+                          {selected ? (
+                            <button
+                              type="button"
+                              disabled
+                              style={{
+                                width: "100%",
+                                minHeight: "38px",
+                                border: 0,
+                                borderRadius: "12px",
+                                background: "rgba(255,210,76,0.14)",
+                                color: "#ffd75d",
+                                fontWeight: 900,
+                              }}
+                            >
+                              ✓ {shopText.selectedPet}
+                            </button>
+                          ) : owned ? (
+                            <button
+                              type="button"
+                              onClick={() => onSelectPet(pet)}
+                              style={{
+                                width: "100%",
+                                minHeight: "38px",
+                                border: "1px solid rgba(255,255,255,0.09)",
+                                borderRadius: "12px",
+                                background: "rgba(255,255,255,0.07)",
+                                color: "white",
+                                fontWeight: 900,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {shopText.choosePet}
+                            </button>
+                          ) : pet.rarity === "rare" ? (
+                            <>
+                              <div
+                                style={{
+                                  marginBottom: "8px",
+                                  fontSize: "13px",
+                                  fontWeight: 900,
+                                }}
+                              >
+                                ⭐ {pet.starsCost}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={petBuyingId !== null}
+                                onClick={() => {
+                                  void buyStarPet(pet);
+                                }}
+                                style={{
+                                  width: "100%",
+                                  minHeight: "38px",
+                                  border: "1px solid rgba(255,255,255,0.09)",
+                                  borderRadius: "12px",
+                                  background: petBuyingId === pet.id
+                                    ? "rgba(111,74,210,0.42)"
+                                    : "linear-gradient(135deg, rgba(111,74,210,0.85), rgba(63,77,175,0.88))",
+                                  color: "white",
+                                  fontWeight: 900,
+                                  cursor: petBuyingId === null ? "pointer" : "not-allowed",
+                                  opacity: petBuyingId !== null && petBuyingId !== pet.id ? 0.55 : 1,
+                                }}
+                              >
+                                {petBuyingId === pet.id
+                                  ? shopText.petBuying
+                                  : `⭐ ${pet.starsCost}`}
+                              </button>
+                              <small
+                                style={{
+                                  display: "block",
+                                  marginTop: "6px",
+                                  fontSize: "9px",
+                                  opacity: 0.55,
+                                  textAlign: "center",
+                                }}
+                              >
+                                {shopText.telegramOnly}
+                              </small>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                disabled={!affordable}
+                                onClick={() => onBuyComfortPet(pet)}
+                                style={{
+                                  width: "100%",
+                                  minHeight: "38px",
+                                  border: 0,
+                                  borderRadius: "12px",
+                                  background: affordable
+                                    ? "linear-gradient(135deg, #e9bc4b, #d9912d)"
+                                    : "rgba(255,255,255,0.06)",
+                                  color: affordable ? "#291b00" : "rgba(255,255,255,0.42)",
+                                  fontWeight: 900,
+                                  cursor: affordable ? "pointer" : "not-allowed",
+                                }}
+                              >
+                                🐾 {formatNumber(pet.comfortCost ?? 0)}
+                              </button>
+                              {!affordable && (
+                                <small
+                                  style={{
+                                    display: "block",
+                                    marginTop: "6px",
+                                    fontSize: "9px",
+                                    opacity: 0.5,
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  {shopText.notEnoughComfort}
+                                </small>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </section>
       ) : (
       <section
@@ -8274,9 +9044,7 @@ function BottomNavigation({
 }: {
   t: Translation;
   activeTab: Tab;
-  setActiveTab: (
-    tab: Tab
-  ) => void;
+  setActiveTab: (tab: Tab) => void;
   hasTaskReward: boolean;
 }) {
   const items: {
@@ -8284,91 +9052,39 @@ function BottomNavigation({
     icon: string;
     label: string;
   }[] = [
-    {
-      id: "home",
-      icon: "⌂",
-      label: t.home,
-    },
-    {
-      id: "upgrades",
-      icon: "✦",
-      label: t.upgrades,
-    },
-    {
-      id: "tasks",
-      icon: "✓",
-      label: t.tasks,
-    },
-    {
-      id: "friends",
-      icon: "♟",
-      label: t.friends,
-    },
-    {
-      id: "shop",
-      icon: "▣",
-      label: t.shop,
-    },
+    { id: "home", icon: "⌂", label: t.home },
+    { id: "upgrades", icon: "✦", label: t.upgrades },
+    { id: "tasks", icon: "✓", label: t.tasks },
+    { id: "friends", icon: "♟", label: t.friends },
+    { id: "shop", icon: "▣", label: t.shop },
   ];
 
   return (
     <nav className="bottom-nav">
-
       <div className="bottom-nav-inner">
+        {items.map((item) => {
+          const active = activeTab === item.id;
 
-        {items.map(
-          (item) => {
-            const active =
-              activeTab ===
-              item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`nav-item ${active ? "active" : ""}`}
+              onClick={() => setActiveTab(item.id)}
+            >
+              <span className="nav-icon-wrap">
+                <span className="nav-icon">{item.icon}</span>
 
-            return (
-              <button
-                key={
-                  item.id
-                }
-                type="button"
-                className={`nav-item ${
-                  active
-                    ? "active"
-                    : ""
-                }`}
-                onClick={() =>
-                  setActiveTab(
-                    item.id
-                  )
-                }
-              >
+                {item.id === "tasks" && hasTaskReward && (
+                  <span className="nav-dot" />
+                )}
+              </span>
 
-                <span className="nav-icon-wrap">
-
-                  <span className="nav-icon">
-                    {
-                      item.icon
-                    }
-                  </span>
-
-                  {item.id ===
-                    "tasks" &&
-                    hasTaskReward && (
-                      <span className="nav-dot" />
-                    )}
-
-                </span>
-
-                <span className="nav-label">
-                  {
-                    item.label
-                  }
-                </span>
-
-              </button>
-            );
-          }
-        )}
-
+              <span className="nav-label">{item.label}</span>
+            </button>
+          );
+        })}
       </div>
-
     </nav>
   );
 }
