@@ -96,6 +96,144 @@ const VIP_TAP_BONUS = 20;
 const VIP_PASSIVE_PER_MINUTE = 22;
 const VIP_MAX_ENERGY = 200;
 
+const GIFT_BOX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+type GiftPrizeKind =
+  | "comfort"
+  | "energy"
+  | "full_energy";
+
+type GiftPrizeRarity =
+  | "common"
+  | "uncommon"
+  | "rare"
+  | "legendary";
+
+type GiftPrizeResult = {
+  kind: GiftPrizeKind;
+  amount: number;
+  rarity: GiftPrizeRarity;
+};
+
+const GIFT_PRIZES: Array<{
+  kind: GiftPrizeKind;
+  amount: number;
+  weight: number;
+  rarity: GiftPrizeRarity;
+}> = [
+  { kind: "comfort", amount: 100, weight: 30, rarity: "common" },
+  { kind: "comfort", amount: 250, weight: 25, rarity: "common" },
+  { kind: "comfort", amount: 500, weight: 18, rarity: "uncommon" },
+  { kind: "energy", amount: 50, weight: 12, rarity: "uncommon" },
+  { kind: "comfort", amount: 1000, weight: 8, rarity: "rare" },
+  { kind: "full_energy", amount: 0, weight: 5, rarity: "rare" },
+  { kind: "comfort", amount: 5000, weight: 2, rarity: "legendary" },
+];
+
+function rollGiftPrize() {
+  const totalWeight = GIFT_PRIZES.reduce(
+    (sum, prize) => sum + prize.weight,
+    0
+  );
+
+  let roll = Math.random() * totalWeight;
+
+  for (const prize of GIFT_PRIZES) {
+    roll -= prize.weight;
+
+    if (roll < 0) {
+      return prize;
+    }
+  }
+
+  return GIFT_PRIZES[0];
+}
+
+function formatGiftCountdown(totalSeconds: number) {
+  const safeSeconds = Math.max(
+    0,
+    Math.floor(totalSeconds)
+  );
+
+  const hours = Math.floor(
+    safeSeconds / 3600
+  );
+
+  const minutes = Math.floor(
+    (safeSeconds % 3600) / 60
+  );
+
+  const seconds =
+    safeSeconds % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(
+    minutes
+  ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getGiftUi(language: Language) {
+  if (language === "en") {
+    return {
+      title: "Gift for your kitty",
+      available: "READY!",
+      open: "OPEN",
+      nextGift: "Next gift in",
+      opening: "Opening...",
+      rewardTitle: "YOUR REWARD",
+      claim: "Awesome!",
+      comfort: "Comfort",
+      energy: "Energy",
+      fullEnergy: "Full energy",
+      vipBonus: "VIP bonus x1.25",
+      common: "Common reward",
+      uncommon: "Uncommon reward",
+      rare: "Rare reward",
+      legendary: "Legendary reward",
+      loadError: "Could not load the gift. Try again.",
+    };
+  }
+
+  if (language === "ua") {
+    return {
+      title: "Подарунок для котика",
+      available: "ДОСТУПНО!",
+      open: "ВІДКРИТИ",
+      nextGift: "Наступний подарунок через",
+      opening: "Відкриваємо...",
+      rewardTitle: "ТВОЯ НАГОРОДА",
+      claim: "Супер!",
+      comfort: "Затишок",
+      energy: "Енергія",
+      fullEnergy: "Повна енергія",
+      vipBonus: "VIP-бонус x1.25",
+      common: "Звичайна нагорода",
+      uncommon: "Незвичайна нагорода",
+      rare: "Рідкісна нагорода",
+      legendary: "Легендарна нагорода",
+      loadError: "Не вдалося завантажити подарунок. Спробуй ще раз.",
+    };
+  }
+
+  return {
+    title: "Подарок для котика",
+    available: "ДОСТУПЕН!",
+    open: "ОТКРЫТЬ",
+    nextGift: "Следующий подарок через",
+    opening: "Открываем...",
+    rewardTitle: "ТВОЯ НАГРАДА",
+    claim: "Супер!",
+    comfort: "Комфорт",
+    energy: "Энергия",
+    fullEnergy: "Полная энергия",
+    vipBonus: "VIP-бонус x1.25",
+    common: "Обычная награда",
+    uncommon: "Необычная награда",
+    rare: "Редкая награда",
+    legendary: "Легендарная награда",
+    loadError: "Не удалось загрузить подарок. Попробуй ещё раз.",
+  };
+}
+
 const DAILY_RESET_AT_KEY = "trusty_daily_reset_at";
 const DAILY_PET_COUNT_KEY = "trusty_daily_pet_count";
 const DAILY_PET_200_CLAIMED_KEY = "trusty_daily_pet_200_claimed";
@@ -1586,25 +1724,19 @@ function App() {
      GAME STATE
   =================================================== */
 
-  const [energy, setEnergy] =
-    useState(() => {
-      const storedEnergy =
-        getStoredNumber(
-          ENERGY_STORAGE_KEY,
-          MAX_ENERGY
-        );
+ const [energy, setEnergy] =
+  useState(() => {
+    const storedEnergy =
+      getStoredNumber(
+        ENERGY_STORAGE_KEY,
+        MAX_ENERGY
+      );
 
-      const storedTimestamp =
-        getStoredNumber(
-          ENERGY_TIMESTAMP_KEY,
-          Date.now()
-        );
-
-      return calculateOfflineEnergy(
-        storedEnergy,
-        storedTimestamp
-      ).energy;
-    });
+    return Math.max(
+      0,
+      storedEnergy
+    );
+  });
 
   const [comfort, setComfort] =
     useState(() =>
@@ -1774,6 +1906,24 @@ function App() {
 
   const [, setVipExpiresAt] =
     useState<string | null>(null);
+
+  const [giftBoxNextAt, setGiftBoxNextAt] =
+    useState<number>(0);
+
+  const [giftBoxLoaded, setGiftBoxLoaded] =
+    useState(false);
+
+  const [giftBoxOpening, setGiftBoxOpening] =
+    useState(false);
+
+  const [giftBoxPrize, setGiftBoxPrize] =
+    useState<GiftPrizeResult | null>(null);
+
+  const [giftBoxNow, setGiftBoxNow] =
+    useState(() => Date.now());
+
+  const [giftBoxError, setGiftBoxError] =
+    useState("");
 
   /* ===================================================
      SUPABASE AUTH + PLAYER PROFILE
@@ -1952,6 +2102,211 @@ function App() {
   const maxEnergy = vipActive
     ? VIP_MAX_ENERGY
     : MAX_ENERGY;
+
+  /* ===================================================
+     DAILY GIFT BOX
+  =================================================== */
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setGiftBoxNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseReady || !userId) {
+      setGiftBoxLoaded(false);
+      setGiftBoxNextAt(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadGiftBox = async () => {
+      setGiftBoxError("");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("gift_box_next_at")
+        .eq("id", userId)
+        .single();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error(
+          "TrustyPaws gift box loading error:",
+          error
+        );
+        setGiftBoxLoaded(false);
+        setGiftBoxError(getGiftUi(language).loadError);
+        return;
+      }
+
+      const nextAt = data?.gift_box_next_at
+        ? new Date(data.gift_box_next_at).getTime()
+        : 0;
+
+      setGiftBoxNextAt(
+        Number.isFinite(nextAt) ? nextAt : 0
+      );
+      setGiftBoxLoaded(true);
+    };
+
+    void loadGiftBox();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabaseReady, userId, language]);
+
+  const giftBoxAvailable =
+    giftBoxLoaded &&
+    !giftBoxOpening &&
+    giftBoxNextAt <= giftBoxNow;
+
+  const giftBoxSecondsLeft =
+    giftBoxNextAt > giftBoxNow
+      ? Math.ceil(
+          (giftBoxNextAt - giftBoxNow) / 1000
+        )
+      : 0;
+
+  const openGiftBox = async () => {
+    if (
+      !supabaseReady ||
+      !userId ||
+      !giftBoxLoaded ||
+      giftBoxOpening
+    ) {
+      return;
+    }
+
+    const now = Date.now();
+
+    if (giftBoxNextAt > now) {
+      return;
+    }
+
+    setGiftBoxOpening(true);
+    setGiftBoxError("");
+
+    try {
+      const { data: latestProfile, error: loadError } =
+        await supabase
+          .from("profiles")
+          .select("gift_box_next_at")
+          .eq("id", userId)
+          .single();
+
+      if (loadError) {
+        throw loadError;
+      }
+
+      const latestNextAt =
+        latestProfile?.gift_box_next_at
+          ? new Date(
+              latestProfile.gift_box_next_at
+            ).getTime()
+          : 0;
+
+      if (
+        Number.isFinite(latestNextAt) &&
+        latestNextAt > now
+      ) {
+        setGiftBoxNextAt(latestNextAt);
+        return;
+      }
+
+      const rolledPrize = rollGiftPrize();
+
+      const finalAmount =
+        rolledPrize.kind === "comfort" &&
+        vipActive
+          ? Math.round(
+              rolledPrize.amount * 1.25
+            )
+          : rolledPrize.amount;
+
+      const newComfort =
+        rolledPrize.kind === "comfort"
+          ? comfort + finalAmount
+          : comfort;
+
+      const newEnergy =
+        rolledPrize.kind === "full_energy"
+          ? maxEnergy
+          : rolledPrize.kind === "energy"
+          ? Math.min(
+              maxEnergy,
+              energy + finalAmount
+            )
+          : energy;
+
+      const nextAt =
+        now + GIFT_BOX_COOLDOWN_MS;
+
+      const { error: updateError } =
+        await supabase
+          .from("profiles")
+          .update({
+            gift_box_next_at:
+              new Date(nextAt).toISOString(),
+            comfort: newComfort,
+            energy: Math.round(newEnergy),
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", userId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      if (rolledPrize.kind === "comfort") {
+        setComfort(newComfort);
+      }
+
+      if (
+        rolledPrize.kind === "energy" ||
+        rolledPrize.kind === "full_energy"
+      ) {
+        setEnergy(newEnergy);
+
+        localStorage.setItem(
+          ENERGY_STORAGE_KEY,
+          String(newEnergy)
+        );
+
+        localStorage.setItem(
+          ENERGY_TIMESTAMP_KEY,
+          String(now)
+        );
+      }
+
+      setGiftBoxNextAt(nextAt);
+      setGiftBoxNow(now);
+      setGiftBoxPrize({
+        kind: rolledPrize.kind,
+        amount: finalAmount,
+        rarity: rolledPrize.rarity,
+      });
+    } catch (error) {
+      console.error(
+        "TrustyPaws gift box opening error:",
+        error
+      );
+      setGiftBoxError(
+        getGiftUi(language).loadError
+      );
+    } finally {
+      setGiftBoxOpening(false);
+    }
+  };
 
   /* ===================================================
      UPGRADES
@@ -2479,10 +2834,43 @@ function App() {
   }, [energy, maxEnergy]);
 
   useEffect(() => {
-    setEnergy((current) =>
-      Math.min(current, maxEnergy)
+  if (!supabaseReady || !userId) {
+    return;
+  }
+
+  const now = Date.now();
+
+  const storedEnergy =
+    getStoredNumber(
+      ENERGY_STORAGE_KEY,
+      maxEnergy
     );
-  }, [maxEnergy]);
+
+  const storedTimestamp =
+    getStoredNumber(
+      ENERGY_TIMESTAMP_KEY,
+      now
+    );
+
+  const result =
+    calculateOfflineEnergy(
+      storedEnergy,
+      storedTimestamp,
+      maxEnergy
+    );
+
+  setEnergy(result.energy);
+
+  localStorage.setItem(
+    ENERGY_STORAGE_KEY,
+    String(result.energy)
+  );
+
+  localStorage.setItem(
+    ENERGY_TIMESTAMP_KEY,
+    String(result.timestamp)
+  );
+}, [maxEnergy, supabaseReady, userId]);
 
   /* ===================================================
      PASSIVE INCOME
@@ -3150,6 +3538,267 @@ const formatTime = (
   return (
     <div className="app">
 
+      <style>{`
+        .daily-gift-box {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          z-index: 18;
+          width: min(184px, calc(100% - 24px));
+          min-height: 58px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 9px;
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          border-radius: 16px;
+          background: rgba(20, 24, 28, 0.78);
+          color: #fff;
+          text-align: left;
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          cursor: pointer;
+          transition:
+            transform 160ms ease,
+            opacity 160ms ease,
+            border-color 160ms ease;
+        }
+
+        .daily-gift-box:disabled {
+          cursor: default;
+          opacity: 0.82;
+        }
+
+        .daily-gift-ready {
+          border-color: rgba(255, 224, 120, 0.9);
+          box-shadow:
+            0 8px 24px rgba(0, 0, 0, 0.24),
+            0 0 18px rgba(255, 215, 95, 0.28);
+          animation: trustyGiftPulse 1.8s ease-in-out infinite;
+        }
+
+        .daily-gift-icon {
+          flex: 0 0 auto;
+          display: grid;
+          place-items: center;
+          width: 42px;
+          height: 42px;
+          font-size: 30px;
+          filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.25));
+        }
+
+        .daily-gift-ready .daily-gift-icon {
+          animation: trustyGiftWiggle 2s ease-in-out infinite;
+        }
+
+        .daily-gift-copy {
+          min-width: 0;
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .daily-gift-copy strong {
+          overflow: hidden;
+          font-size: 11px;
+          line-height: 1.2;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .daily-gift-copy small {
+          font-size: 9px;
+          line-height: 1.2;
+          opacity: 0.76;
+        }
+
+        .daily-gift-open-label {
+          flex: 0 0 auto;
+          padding: 5px 7px;
+          border-radius: 8px;
+          background: rgba(255, 215, 84, 0.94);
+          color: #332400;
+          font-size: 8px;
+          font-weight: 900;
+          letter-spacing: 0.04em;
+        }
+
+        .daily-gift-error {
+          position: absolute;
+          top: 76px;
+          left: 12px;
+          z-index: 19;
+          max-width: 190px;
+          padding: 6px 8px;
+          border-radius: 10px;
+          background: rgba(88, 22, 22, 0.88);
+          color: #fff;
+          font-size: 9px;
+          line-height: 1.25;
+        }
+
+        .gift-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          background: rgba(0, 0, 0, 0.7);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+
+        .gift-modal {
+          width: min(360px, 100%);
+          padding: 28px 22px 22px;
+          border: 1px solid rgba(255, 230, 155, 0.5);
+          border-radius: 26px;
+          background:
+            radial-gradient(circle at top, rgba(255, 222, 122, 0.18), transparent 38%),
+            #16191d;
+          color: #fff;
+          text-align: center;
+          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
+          animation: trustyGiftModalIn 220ms ease-out;
+        }
+
+        .gift-modal-sparkles {
+          margin-bottom: 8px;
+          font-size: 24px;
+          letter-spacing: 5px;
+        }
+
+        .gift-modal-eyebrow {
+          display: block;
+          margin-bottom: 12px;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+          opacity: 0.62;
+        }
+
+        .gift-modal-prize-icon {
+          display: grid;
+          place-items: center;
+          width: 82px;
+          height: 82px;
+          margin: 0 auto 12px;
+          border-radius: 24px;
+          background: rgba(255, 255, 255, 0.08);
+          font-size: 44px;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+        }
+
+        .gift-modal h2 {
+          margin: 0 0 10px;
+          font-size: 24px;
+          line-height: 1.15;
+        }
+
+        .gift-rarity {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 28px;
+          padding: 5px 10px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.08);
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .gift-rarity-rare {
+          box-shadow: inset 0 0 0 1px rgba(255, 220, 115, 0.25);
+        }
+
+        .gift-rarity-legendary {
+          box-shadow:
+            inset 0 0 0 1px rgba(255, 220, 115, 0.5),
+            0 0 22px rgba(255, 208, 65, 0.18);
+        }
+
+        .gift-vip-bonus {
+          margin-top: 10px;
+          font-size: 11px;
+          font-weight: 800;
+          opacity: 0.82;
+        }
+
+        .gift-modal-close {
+          width: 100%;
+          min-height: 48px;
+          margin-top: 18px;
+          border: 0;
+          border-radius: 15px;
+          background: linear-gradient(135deg, #f4cb67, #f0a936);
+          color: #2c1d00;
+          font-size: 14px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        @keyframes trustyGiftPulse {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-2px) scale(1.015); }
+        }
+
+        @keyframes trustyGiftWiggle {
+          0%, 70%, 100% { transform: rotate(0deg); }
+          76% { transform: rotate(-7deg); }
+          82% { transform: rotate(7deg); }
+          88% { transform: rotate(-4deg); }
+          94% { transform: rotate(4deg); }
+        }
+
+        @keyframes trustyGiftModalIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px) scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @media (max-width: 430px) {
+          .daily-gift-box {
+            width: 150px;
+            min-height: 52px;
+            padding: 6px 7px;
+          }
+
+          .daily-gift-icon {
+            width: 34px;
+            height: 34px;
+            font-size: 25px;
+          }
+
+          .daily-gift-copy strong {
+            font-size: 9px;
+          }
+
+          .daily-gift-copy small {
+            font-size: 8px;
+          }
+
+          .daily-gift-open-label {
+            display: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .daily-gift-ready,
+          .daily-gift-ready .daily-gift-icon,
+          .gift-modal {
+            animation: none;
+          }
+        }
+      `}</style>
+
       <div className="game-shell">
 
         {/* TOP BAR */}
@@ -3404,6 +4053,29 @@ const formatTime = (
               formatNumber={
                 formatNumber
               }
+              language={
+                language
+              }
+              giftBoxAvailable={
+                giftBoxAvailable
+              }
+              giftBoxLoaded={
+                giftBoxLoaded
+              }
+              giftBoxOpening={
+                giftBoxOpening
+              }
+              giftBoxCooldownText={
+                formatGiftCountdown(
+                  giftBoxSecondsLeft
+                )
+              }
+              giftBoxError={
+                giftBoxError
+              }
+              onOpenGiftBox={() =>
+                void openGiftBox()
+              }
             />
           )}
 
@@ -3542,6 +4214,93 @@ const formatTime = (
         />
 
       </div>
+
+      {/* DAILY GIFT MODAL */}
+
+      {giftBoxPrize && (
+        <div
+          className="gift-modal-overlay"
+          onClick={() =>
+            setGiftBoxPrize(null)
+          }
+        >
+          <div
+            className="gift-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="gift-modal-sparkles">
+              ✨ 🎁 ✨
+            </div>
+
+            <span className="gift-modal-eyebrow">
+              {
+                getGiftUi(language)
+                  .rewardTitle
+              }
+            </span>
+
+            <div className="gift-modal-prize-icon">
+              {giftBoxPrize.kind === "comfort"
+                ? "🐾"
+                : "⚡"}
+            </div>
+
+            <h2>
+              {giftBoxPrize.kind ===
+              "full_energy"
+                ? getGiftUi(language)
+                    .fullEnergy
+                : `+${
+                    giftBoxPrize.amount
+                  } ${
+                    giftBoxPrize.kind ===
+                    "comfort"
+                      ? getGiftUi(language)
+                          .comfort
+                      : getGiftUi(language)
+                          .energy
+                  }`}
+            </h2>
+
+            <div
+              className={`gift-rarity gift-rarity-${giftBoxPrize.rarity}`}
+            >
+              {
+                getGiftUi(language)[
+                  giftBoxPrize.rarity
+                ]
+              }
+            </div>
+
+            {vipActive &&
+              giftBoxPrize.kind ===
+                "comfort" && (
+                <div className="gift-vip-bonus">
+                  👑{" "}
+                  {
+                    getGiftUi(language)
+                      .vipBonus
+                  }
+                </div>
+              )}
+
+            <button
+              type="button"
+              className="gift-modal-close"
+              onClick={() =>
+                setGiftBoxPrize(null)
+              }
+            >
+              {
+                getGiftUi(language)
+                  .claim
+              }
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* RESET MODAL */}
 
@@ -3820,6 +4579,13 @@ function HomeScreen({
   showReward,
   onPet,
   formatNumber,
+  language,
+  giftBoxAvailable,
+  giftBoxLoaded,
+  giftBoxOpening,
+  giftBoxCooldownText,
+  giftBoxError,
+  onOpenGiftBox,
 }: {
   t: Translation;
   petName: string;
@@ -3838,6 +4604,13 @@ function HomeScreen({
   formatNumber: (
     value: number
   ) => string;
+  language: Language;
+  giftBoxAvailable: boolean;
+  giftBoxLoaded: boolean;
+  giftBoxOpening: boolean;
+  giftBoxCooldownText: string;
+  giftBoxError: string;
+  onOpenGiftBox: () => void;
 }) {
   const energyPercent =
     Math.min(
@@ -4047,6 +4820,64 @@ function HomeScreen({
           </div>
 
           <div className="scene-ground-back" />
+
+          <button
+            type="button"
+            className={`daily-gift-box ${
+              giftBoxAvailable
+                ? "daily-gift-ready"
+                : ""
+            }`}
+            onClick={
+              onOpenGiftBox
+            }
+            disabled={
+              !giftBoxAvailable
+            }
+            aria-label={
+              getGiftUi(language).title
+            }
+          >
+            <span className="daily-gift-icon">
+              🎁
+            </span>
+
+            <span className="daily-gift-copy">
+              <strong>
+                {
+                  getGiftUi(language)
+                    .title
+                }
+              </strong>
+
+              <small>
+                {!giftBoxLoaded
+                  ? "..."
+                  : giftBoxOpening
+                  ? getGiftUi(language)
+                      .opening
+                  : giftBoxAvailable
+                  ? getGiftUi(language)
+                      .available
+                  : `${getGiftUi(language).nextGift} ${giftBoxCooldownText}`}
+              </small>
+            </span>
+
+            {giftBoxAvailable && (
+              <span className="daily-gift-open-label">
+                {
+                  getGiftUi(language)
+                    .open
+                }
+              </span>
+            )}
+          </button>
+
+          {giftBoxError && (
+            <div className="daily-gift-error">
+              ⚠️ {giftBoxError}
+            </div>
+          )}
 
           {highestHouseData && (
             <img
