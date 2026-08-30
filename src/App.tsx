@@ -3320,7 +3320,7 @@ function App() {
   }, [passivePerMinute]);
 
   const showRewardedAd = async () => {
-    if (energy > 0 || adLoading) {
+    if (energy > 10 || adLoading) {
       return;
     }
 
@@ -5537,7 +5537,7 @@ function HomeScreen({
 
         </div>
 
-        {energy <= 0 && (
+        {energy <= 10 && (
           <div
             style={{
               marginTop: "12px",
