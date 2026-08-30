@@ -92,6 +92,10 @@ type AdsgramWindow = Window & {
   };
 };
 
+type MonetagWindow = Window & {
+  show_11689364?: () => Promise<unknown>;
+};
+
 /* =====================================================
    CONSTANTS
 ===================================================== */
@@ -135,6 +139,10 @@ const ADSGRAM_REWARD_BLOCK_ID = "45286";
 const ADSGRAM_REWARD_ENERGY = 100;
 const ADSGRAM_REWARD_COMFORT = 500;
 const ADSGRAM_SCRIPT_URL = "https://sad.adsgram.ai/js/sad.min.js";
+
+const MONETAG_ZONE_ID = "11689364";
+const MONETAG_SDK_NAME = "show_11689364";
+const MONETAG_SCRIPT_URL = "https://libtl.com/sdk.js";
 
 type GiftPrizeKind =
   | "comfort"
@@ -2271,6 +2279,37 @@ function App() {
     : MAX_ENERGY;
 
   /* ===================================================
+     MONETAG REWARDED INTERSTITIAL
+  =================================================== */
+
+  useEffect(() => {
+    const existingScript =
+      document.querySelector<HTMLScriptElement>(
+        `script[data-zone="${MONETAG_ZONE_ID}"][data-sdk="${MONETAG_SDK_NAME}"]`
+      );
+
+    if (existingScript) {
+      return;
+    }
+
+    const script =
+      document.createElement("script");
+
+    script.src = MONETAG_SCRIPT_URL;
+    script.async = true;
+    script.setAttribute(
+      "data-zone",
+      MONETAG_ZONE_ID
+    );
+    script.setAttribute(
+      "data-sdk",
+      MONETAG_SDK_NAME
+    );
+
+    document.head.appendChild(script);
+  }, []);
+
+  /* ===================================================
      ADSGRAM REWARDED AD
   =================================================== */
 
@@ -3327,38 +3366,7 @@ function App() {
     setAdError("");
     setAdLoading(true);
 
-    try {
-      let controller =
-        adsgramControllerRef.current;
-
-      if (!controller) {
-        const adsgram =
-          (window as AdsgramWindow).Adsgram;
-
-        if (adsgram) {
-          controller = adsgram.init({
-            blockId: ADSGRAM_REWARD_BLOCK_ID,
-            debug: false,
-          });
-
-          adsgramControllerRef.current =
-            controller;
-        }
-      }
-
-      if (!controller) {
-        throw new Error(
-          "AdsGram SDK is not loaded"
-        );
-      }
-
-      const result =
-        await controller.show();
-
-      if (!result.done || result.error) {
-        return;
-      }
-
+    const grantAdReward = () => {
       const rewardedEnergy =
         Math.min(
           maxEnergy,
@@ -3383,9 +3391,77 @@ function App() {
         ENERGY_TIMESTAMP_KEY,
         String(now)
       );
+    };
+
+    try {
+      /* -----------------------------------------------
+         1. MONETAG — PRIMARY NETWORK
+      ----------------------------------------------- */
+      const monetagShow =
+        (window as MonetagWindow)
+          .show_11689364;
+
+      if (
+        typeof monetagShow ===
+        "function"
+      ) {
+        try {
+          await monetagShow();
+          grantAdReward();
+          return;
+        } catch (monetagError) {
+          console.warn(
+            "Monetag rewarded ad unavailable, trying AdsGram:",
+            monetagError
+          );
+        }
+      } else {
+        console.warn(
+          "Monetag SDK is not ready, trying AdsGram."
+        );
+      }
+
+      /* -----------------------------------------------
+         2. ADSGRAM — FALLBACK NETWORK
+      ----------------------------------------------- */
+      let controller =
+        adsgramControllerRef.current;
+
+      if (!controller) {
+        const adsgram =
+          (window as AdsgramWindow).Adsgram;
+
+        if (adsgram) {
+          controller = adsgram.init({
+            blockId: ADSGRAM_REWARD_BLOCK_ID,
+            debug: false,
+          });
+
+          adsgramControllerRef.current =
+            controller;
+        }
+      }
+
+      if (!controller) {
+        throw new Error(
+          "Neither Monetag nor AdsGram is available"
+        );
+      }
+
+      const result =
+        await controller.show();
+
+      if (!result.done || result.error) {
+        throw new Error(
+          result.description ||
+            "AdsGram ad was not completed"
+        );
+      }
+
+      grantAdReward();
     } catch (error) {
       console.error(
-        "AdsGram rewarded ad error:",
+        "Rewarded ad error:",
         error
       );
 
