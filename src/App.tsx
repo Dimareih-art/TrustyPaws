@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import { supabase } from "./lib/supabase";
 
@@ -70,6 +70,28 @@ function getTelegramUser(): TelegramUser | null {
   return telegram?.initDataUnsafe?.user ?? null;
 }
 
+type AdsgramShowResult = {
+  done: boolean;
+  description: string;
+  state: "load" | "render" | "playing" | "destroy";
+  error: boolean;
+};
+
+type AdsgramController = {
+  show: () => Promise<AdsgramShowResult>;
+  destroy: () => void;
+};
+
+type AdsgramWindow = Window & {
+  Adsgram?: {
+    init: (params: {
+      blockId: string;
+      debug?: boolean;
+      debugBannerType?: "RewardedVideo" | "FullscreenMedia";
+    }) => AdsgramController;
+  };
+};
+
 /* =====================================================
    CONSTANTS
 ===================================================== */
@@ -108,6 +130,11 @@ const VIP_PASSIVE_PER_MINUTE = 22;
 const VIP_MAX_ENERGY = 200;
 
 const GIFT_BOX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+const ADSGRAM_REWARD_BLOCK_ID = "45286";
+const ADSGRAM_REWARD_ENERGY = 100;
+const ADSGRAM_REWARD_COMFORT = 500;
+const ADSGRAM_SCRIPT_URL = "https://sad.adsgram.ai/js/sad.min.js";
 
 type GiftPrizeKind =
   | "comfort"
@@ -1850,6 +1877,15 @@ function App() {
       )
     );
 
+  const adsgramControllerRef =
+    useRef<AdsgramController | null>(null);
+
+  const [adLoading, setAdLoading] =
+    useState(false);
+
+  const [adError, setAdError] =
+    useState("");
+
   const [petCount, setPetCount] =
     useState(() =>
       getStoredNumber(
@@ -2233,6 +2269,67 @@ function App() {
   const maxEnergy = vipActive
     ? VIP_MAX_ENERGY
     : MAX_ENERGY;
+
+  /* ===================================================
+     ADSGRAM REWARDED AD
+  =================================================== */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const initAdsgram = () => {
+      if (cancelled || adsgramControllerRef.current) {
+        return;
+      }
+
+      const adsgram =
+        (window as AdsgramWindow).Adsgram;
+
+      if (!adsgram) {
+        return;
+      }
+
+      adsgramControllerRef.current =
+        adsgram.init({
+          blockId: ADSGRAM_REWARD_BLOCK_ID,
+          debug: false,
+        });
+    };
+
+    const existingScript =
+      document.querySelector<HTMLScriptElement>(
+        `script[src="${ADSGRAM_SCRIPT_URL}"]`
+      );
+
+    if (existingScript) {
+      if ((window as AdsgramWindow).Adsgram) {
+        initAdsgram();
+      } else {
+        existingScript.addEventListener(
+          "load",
+          initAdsgram,
+          { once: true }
+        );
+      }
+    } else {
+      const script =
+        document.createElement("script");
+
+      script.src = ADSGRAM_SCRIPT_URL;
+      script.async = true;
+      script.addEventListener(
+        "load",
+        initAdsgram,
+        { once: true }
+      );
+
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* ===================================================
      DAILY GIFT BOX
@@ -3221,6 +3318,88 @@ function App() {
         timer
       );
   }, [passivePerMinute]);
+
+  const showRewardedAd = async () => {
+    if (energy > 0 || adLoading) {
+      return;
+    }
+
+    setAdError("");
+    setAdLoading(true);
+
+    try {
+      let controller =
+        adsgramControllerRef.current;
+
+      if (!controller) {
+        const adsgram =
+          (window as AdsgramWindow).Adsgram;
+
+        if (adsgram) {
+          controller = adsgram.init({
+            blockId: ADSGRAM_REWARD_BLOCK_ID,
+            debug: false,
+          });
+
+          adsgramControllerRef.current =
+            controller;
+        }
+      }
+
+      if (!controller) {
+        throw new Error(
+          "AdsGram SDK is not loaded"
+        );
+      }
+
+      const result =
+        await controller.show();
+
+      if (!result.done || result.error) {
+        return;
+      }
+
+      const rewardedEnergy =
+        Math.min(
+          maxEnergy,
+          ADSGRAM_REWARD_ENERGY
+        );
+
+      setEnergy(rewardedEnergy);
+      setComfort(
+        (current) =>
+          current +
+          ADSGRAM_REWARD_COMFORT
+      );
+
+      const now = Date.now();
+
+      localStorage.setItem(
+        ENERGY_STORAGE_KEY,
+        String(rewardedEnergy)
+      );
+
+      localStorage.setItem(
+        ENERGY_TIMESTAMP_KEY,
+        String(now)
+      );
+    } catch (error) {
+      console.error(
+        "AdsGram rewarded ad error:",
+        error
+      );
+
+      setAdError(
+        language === "en"
+          ? "Ad is unavailable right now. Please try again later."
+          : language === "ua"
+          ? "Реклама зараз недоступна. Спробуй пізніше."
+          : "Реклама сейчас недоступна. Попробуй позже."
+      );
+    } finally {
+      setAdLoading(false);
+    }
+  };
 
   /* ===================================================
      TAP
@@ -4352,6 +4531,15 @@ const formatTime = (
               onOpenGiftBox={() =>
                 void openGiftBox()
               }
+              adLoading={
+                adLoading
+              }
+              adError={
+                adError
+              }
+              onWatchAd={() =>
+                void showRewardedAd()
+              }
             />
           )}
 
@@ -4870,6 +5058,9 @@ function HomeScreen({
   giftBoxCooldownText,
   giftBoxError,
   onOpenGiftBox,
+  adLoading,
+  adError,
+  onWatchAd,
 }: {
   t: Translation;
   petName: string;
@@ -4896,6 +5087,9 @@ function HomeScreen({
   giftBoxCooldownText: string;
   giftBoxError: string;
   onOpenGiftBox: () => void;
+  adLoading: boolean;
+  adError: string;
+  onWatchAd: () => void;
 }) {
   const energyPercent =
     Math.min(
@@ -5342,6 +5536,88 @@ function HomeScreen({
           </div>
 
         </div>
+
+        {energy <= 0 && (
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "14px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: "15px",
+                marginBottom: "5px",
+              }}
+            >
+              📺{" "}
+              {language === "en"
+                ? "Restore energy"
+                : language === "ua"
+                ? "Відновити енергію"
+                : "Восстановить энергию"}
+            </div>
+
+            <div
+              style={{
+                fontSize: "12px",
+                opacity: 0.72,
+                marginBottom: "10px",
+              }}
+            >
+              {language === "en"
+                ? "Watch the ad to get +100 ⚡ Energy and +500 🐾 Comfort"
+                : language === "ua"
+                ? "Переглянь рекламу та отримай +100 ⚡ енергії і +500 🐾 затишку"
+                : "Посмотри рекламу и получи +100 ⚡ энергии и +500 🐾 Комфорта"}
+            </div>
+
+            <button
+              type="button"
+              onClick={onWatchAd}
+              disabled={adLoading}
+              style={{
+                width: "100%",
+                border: 0,
+                borderRadius: "14px",
+                padding: "12px 14px",
+                fontWeight: 800,
+                cursor: adLoading
+                  ? "default"
+                  : "pointer",
+              }}
+            >
+              {adLoading
+                ? language === "en"
+                  ? "Loading ad..."
+                  : language === "ua"
+                  ? "Завантаження реклами..."
+                  : "Загрузка рекламы..."
+                : language === "en"
+                ? "📺 Watch ad"
+                : language === "ua"
+                ? "📺 Дивитися рекламу"
+                : "📺 Смотреть рекламу"}
+            </button>
+
+            {adError && (
+              <div
+                style={{
+                  marginTop: "8px",
+                  fontSize: "12px",
+                  opacity: 0.8,
+                }}
+              >
+                ⚠️ {adError}
+              </div>
+            )}
+          </div>
+        )}
 
       </section>
 
