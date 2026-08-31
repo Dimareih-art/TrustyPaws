@@ -181,7 +181,7 @@ const ONE_TIME_FRIEND_1_REWARD = 200;
 const ONE_TIME_FRIEND_5_GOAL = 5;
 const ONE_TIME_FRIEND_5_REWARD = 1000;
 const ONE_TIME_FRIEND_10_GOAL = 10;
-const ONE_TIME_FRIEND_10_REWARD = 50000;
+const ONE_TIME_FRIEND_10_REWARD = 5000;
 
 /* =====================================================
    REFERRAL TASKS
