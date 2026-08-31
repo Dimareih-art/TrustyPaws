@@ -54,20 +54,75 @@ type TelegramUser = {
   last_name?: string;
 };
 
-function getTelegramUser(): TelegramUser | null {
-  const telegram = (
+type TelegramInitData = {
+  user?: TelegramUser;
+  start_param?: string;
+};
+
+function getTelegramWebApp() {
+  return (
     window as unknown as {
       Telegram?: {
         WebApp?: {
-          initDataUnsafe?: {
-            user?: TelegramUser;
-          };
+          initDataUnsafe?: TelegramInitData;
         };
       };
     }
   ).Telegram?.WebApp;
+}
+
+function getTelegramUser(): TelegramUser | null {
+  const telegram = getTelegramWebApp();
 
   return telegram?.initDataUnsafe?.user ?? null;
+}
+
+function getTelegramStartParam(): string | null {
+  const telegram = getTelegramWebApp();
+
+  const startParam =
+    telegram?.initDataUnsafe?.start_param;
+
+  if (
+    typeof startParam === "string" &&
+    startParam.trim()
+  ) {
+    return startParam.trim();
+  }
+
+  /*
+   * Запасной вариант.
+   * Telegram также передаёт startapp
+   * через GET-параметр tgWebAppStartParam.
+   */
+  const params =
+    new URLSearchParams(
+      window.location.search
+    );
+
+  return (
+    params.get(
+      "tgWebAppStartParam"
+    )?.trim() || null
+  );
+}
+
+function getReferralPlayerCode(): string | null {
+  const startParam =
+    getTelegramStartParam();
+
+  if (!startParam) {
+    return null;
+  }
+
+  const match =
+    startParam
+      .toUpperCase()
+      .match(
+        /^REF_(TP-[A-F0-9]{8})$/
+      );
+
+  return match?.[1] ?? null;
 }
 
 type AdsgramShowResult = {
@@ -128,6 +183,22 @@ const ONE_TIME_FRIEND_5_REWARD = 1000;
 const ONE_TIME_FRIEND_10_GOAL = 10;
 const ONE_TIME_FRIEND_10_REWARD = 50000;
 
+/* =====================================================
+   REFERRAL TASKS
+   ===================================================== */
+
+const REFERRAL_1_GOAL = 1;
+const REFERRAL_1_REWARD = 500;
+
+const REFERRAL_3_GOAL = 3;
+const REFERRAL_3_REWARD = 1500;
+
+const REFERRAL_5_GOAL = 5;
+const REFERRAL_5_REWARD = 2500;
+
+const REFERRAL_10_GOAL = 10;
+const REFERRAL_10_REWARD = 10000;
+
 const VIP_PRICE_STARS = 199;
 const VIP_TAP_BONUS = 20;
 const VIP_PASSIVE_PER_MINUTE = 22;
@@ -137,7 +208,7 @@ const GIFT_BOX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 const ADSGRAM_REWARD_BLOCK_ID = "45286";
 const ADSGRAM_REWARD_ENERGY = 100;
-const ADSGRAM_REWARD_COMFORT = 500;
+const ADSGRAM_REWARD_COMFORT = 150;
 const ADSGRAM_SCRIPT_URL = "https://sad.adsgram.ai/js/sad.min.js";
 
 const MONETAG_ZONE_ID = "11689364";
@@ -290,6 +361,8 @@ const ONE_TIME_PET_10000_CLAIMED_KEY = "trusty_one_time_pet_10000_claimed";
 const ONE_TIME_FRIEND_1_CLAIMED_KEY = "trusty_one_time_friend_1_claimed";
 const ONE_TIME_FRIEND_5_CLAIMED_KEY = "trusty_one_time_friend_5_claimed";
 const ONE_TIME_FRIEND_10_CLAIMED_KEY = "trusty_one_time_friend_10_claimed";
+
+
 
 const ENERGY_STORAGE_KEY =
   "trusty_energy";
@@ -1589,8 +1662,8 @@ const HOUSES: Upgrade[] = [
     description:
       "Большой уютный дом для счастливого котика.",
     cost: 500000,
-    tapBonus: 5,
-    passiveBonus: 5,
+    tapBonus: 8,
+    passiveBonus: 8,
     sceneImage:
       assetUrl("scene/house-3.png"),
   },
@@ -1826,6 +1899,50 @@ function App() {
       "items"
     );
 
+    useEffect(() => {
+  if (!supabaseReady || !userId) {
+    return;
+  }
+
+  const referralCode =
+    getReferralPlayerCode();
+
+  if (!referralCode) {
+    return;
+  }
+
+  const registerReferral =
+    async () => {
+      const { data, error } =
+        await supabase.rpc(
+          "register_referral",
+          {
+            ref_code:
+              referralCode,
+          }
+        );
+
+      if (error) {
+        console.error(
+          "TrustyPaws referral registration error:",
+          error
+        );
+
+        return;
+      }
+
+      console.log(
+        "TrustyPaws referral processed:",
+        referralCode,
+        data
+      );
+    };
+
+  void registerReferral();
+}, [
+  supabaseReady,
+  userId,
+]);
   /* ===================================================
      LANGUAGE
   =================================================== */
@@ -2017,7 +2134,30 @@ function App() {
 
   const [friendCount, setFriendCount] = useState(0);
 
- const [dailyResetAt, setDailyResetAt] =
+  const [referralCount, setReferralCount] =
+  useState(0);
+
+const [
+  referral1Claimed,
+  setReferral1Claimed,
+] = useState(false);
+
+const [
+  referral3Claimed,
+  setReferral3Claimed,
+] = useState(false);
+
+const [
+  referral5Claimed,
+  setReferral5Claimed,
+] = useState(false);
+
+const [
+  referral10Claimed,
+  setReferral10Claimed,
+] = useState(false);
+
+  const [dailyResetAt, setDailyResetAt] =
   useState(() => {
     const stored = getStoredNumber(
       DAILY_RESET_AT_KEY,
@@ -2097,6 +2237,57 @@ function App() {
 
   const [giftBoxError, setGiftBoxError] =
     useState("");
+
+  useEffect(() => {
+  if (
+    !supabaseReady ||
+    !userId ||
+    petCount < 100
+  ) {
+    return;
+  }
+
+  let cancelled = false;
+
+  const confirmReferral = async () => {
+    const { data, error } =
+      await supabase.rpc(
+        "confirm_referral_if_ready"
+      );
+
+    if (cancelled) {
+      return;
+    }
+
+    if (error) {
+      console.error(
+        "TrustyPaws referral confirmation error:",
+        error
+      );
+
+      return;
+    }
+
+    if (data) {
+      console.log(
+        "TrustyPaws referral confirmed"
+      );
+    }
+  };
+
+  const timer = window.setTimeout(() => {
+    void confirmReferral();
+  }, 2000);
+
+  return () => {
+    cancelled = true;
+    window.clearTimeout(timer);
+  };
+}, [
+  supabaseReady,
+  userId,
+  petCount,
+]);
 
   /* ===================================================
      SUPABASE AUTH + PLAYER PROFILE
@@ -2966,6 +3157,126 @@ function App() {
   }, [supabaseReady, userId, activeTab]);
 
   /* ===================================================
+   CONFIRMED REFERRAL COUNT FOR TASKS
+=================================================== */
+
+useEffect(() => {
+  if (!supabaseReady || !userId) {
+    setReferralCount(0);
+    return;
+  }
+
+  let cancelled = false;
+
+  const loadReferralCount = async () => {
+    const { count, error } =
+      await supabase
+        .from("referrals")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+
+        .eq("referrer_id", userId)
+        .eq("status", "confirmed");
+
+    if (error) {
+      console.error(
+        "TrustyPaws referral task count error:",
+        error
+      );
+      return;
+    }
+
+    if (!cancelled) {
+      setReferralCount(count ?? 0);
+    }
+  };
+
+  void loadReferralCount();
+
+  const timer = window.setInterval(() => {
+    void loadReferralCount();
+  }, 15000);
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(timer);
+  };
+}, [
+  supabaseReady,
+  userId,
+  activeTab,
+]);
+
+/* ===================================================
+   REFERRAL REWARD CLAIMS FROM SUPABASE
+=================================================== */
+
+useEffect(() => {
+  if (!supabaseReady || !userId) {
+    setReferral1Claimed(false);
+    setReferral3Claimed(false);
+    setReferral5Claimed(false);
+    setReferral10Claimed(false);
+    return;
+  }
+
+  let cancelled = false;
+
+  const loadReferralClaims = async () => {
+    const { data, error } =
+      await supabase
+        .from("referral_task_claims")
+        .select("task_key")
+        .eq("user_id", userId);
+
+    if (error) {
+      console.error(
+        "TrustyPaws referral claims load error:",
+        error
+      );
+      return;
+    }
+
+    if (cancelled) {
+      return;
+    }
+
+    const claimedTasks = new Set(
+      (data ?? []).map(
+        (row) => row.task_key
+      )
+    );
+
+    setReferral1Claimed(
+      claimedTasks.has("referral_1")
+    );
+
+    setReferral3Claimed(
+      claimedTasks.has("referral_3")
+    );
+
+    setReferral5Claimed(
+      claimedTasks.has("referral_5")
+    );
+
+    setReferral10Claimed(
+      claimedTasks.has("referral_10")
+    );
+  };
+
+  void loadReferralClaims();
+
+  return () => {
+    cancelled = true;
+  };
+}, [
+  supabaseReady,
+  userId,
+]);
+
+  /* ===================================================
      DAILY TASK RESET — ONE SHARED 24H TIMER
   =================================================== */
 
@@ -3810,6 +4121,85 @@ function App() {
     setComfort((value) => value + ONE_TIME_FRIEND_10_REWARD);
     setOneTimeFriend10Claimed(true);
   };
+
+  const claimReferralReward = async (
+  taskKey:
+    | "referral_1"
+    | "referral_3"
+    | "referral_5"
+    | "referral_10"
+) => {
+  const { data, error } =
+    await supabase.rpc(
+      "claim_referral_reward",
+      {
+        requested_task_key:
+          taskKey,
+      }
+    );
+
+  if (error) {
+    console.error(
+      "TrustyPaws referral reward error:",
+      error
+    );
+    return;
+  }
+
+  if (!data?.success) {
+    console.log(
+      "TrustyPaws referral reward rejected:",
+      data
+    );
+    return;
+  }
+
+  if (
+    typeof data.comfort === "number"
+  ) {
+    setComfort(data.comfort);
+  }
+
+  if (taskKey === "referral_1") {
+    setReferral1Claimed(true);
+  }
+
+  if (taskKey === "referral_3") {
+    setReferral3Claimed(true);
+  }
+
+  if (taskKey === "referral_5") {
+    setReferral5Claimed(true);
+  }
+
+  if (taskKey === "referral_10") {
+    setReferral10Claimed(true);
+  }
+};
+
+const claimReferral1 = () => {
+  void claimReferralReward(
+    "referral_1"
+  );
+};
+
+const claimReferral3 = () => {
+  void claimReferralReward(
+    "referral_3"
+  );
+};
+
+const claimReferral5 = () => {
+  void claimReferralReward(
+    "referral_5"
+  );
+};
+
+const claimReferral10 = () => {
+  void claimReferralReward(
+    "referral_10"
+  );
+};
 
   const buyComfortPet = (pet: Pet) => {
     if (
@@ -4676,6 +5066,14 @@ const formatTime = (
               oneTimeFriend5Claimed={oneTimeFriend5Claimed}
               oneTimeFriend10Claimed={oneTimeFriend10Claimed}
               friendCount={friendCount}
+              
+              referralCount={referralCount}
+
+              referral1Claimed={referral1Claimed}
+              referral3Claimed={referral3Claimed}
+              referral5Claimed={referral5Claimed}
+              referral10Claimed={referral10Claimed}
+
               secondsUntilReset={Math.max(
                 0,
                 Math.ceil(
@@ -4691,6 +5089,10 @@ const formatTime = (
               onClaimOneTimeFriend1={claimOneTimeFriend1}
               onClaimOneTimeFriend5={claimOneTimeFriend5}
               onClaimOneTimeFriend10={claimOneTimeFriend10}
+              onClaimReferral1={claimReferral1}
+              onClaimReferral3={claimReferral3}
+              onClaimReferral5={claimReferral5}
+              onClaimReferral10={claimReferral10}
               formatTime={formatTime}
             />
           )}
@@ -4756,7 +5158,11 @@ const formatTime = (
               (petCount >= ONE_TIME_PET_10000_GOAL && !oneTimePet10000Claimed) ||
               (friendCount >= ONE_TIME_FRIEND_1_GOAL && !oneTimeFriend1Claimed) ||
               (friendCount >= ONE_TIME_FRIEND_5_GOAL && !oneTimeFriend5Claimed) ||
-              (friendCount >= ONE_TIME_FRIEND_10_GOAL && !oneTimeFriend10Claimed)
+              (friendCount >= ONE_TIME_FRIEND_10_GOAL && !oneTimeFriend10Claimed) ||
+              (referralCount >= REFERRAL_1_GOAL && !referral1Claimed) ||
+              (referralCount >= REFERRAL_3_GOAL && !referral3Claimed) ||
+              (referralCount >= REFERRAL_5_GOAL && !referral5Claimed) ||
+              (referralCount >= REFERRAL_10_GOAL && !referral10Claimed)
             }
         />
 
@@ -6613,6 +7019,11 @@ function TasksScreen({
   oneTimeFriend5Claimed,
   oneTimeFriend10Claimed,
   friendCount,
+  referralCount,
+  referral1Claimed,
+  referral3Claimed,
+  referral5Claimed,
+  referral10Claimed,
   secondsUntilReset,
   onClaimDaily,
   onClaimDailyPet200,
@@ -6623,6 +7034,10 @@ function TasksScreen({
   onClaimOneTimeFriend1,
   onClaimOneTimeFriend5,
   onClaimOneTimeFriend10,
+  onClaimReferral1,
+  onClaimReferral3,
+  onClaimReferral5,
+  onClaimReferral10,
   formatTime,
 }: {
   t: Translation;
@@ -6639,6 +7054,11 @@ function TasksScreen({
   oneTimeFriend5Claimed: boolean;
   oneTimeFriend10Claimed: boolean;
   friendCount: number;
+  referralCount: number;
+  referral1Claimed: boolean;
+  referral3Claimed: boolean;
+  referral5Claimed: boolean;
+  referral10Claimed: boolean;
   secondsUntilReset: number;
   onClaimDaily: () => void;
   onClaimDailyPet200: () => void;
@@ -6649,6 +7069,10 @@ function TasksScreen({
   onClaimOneTimeFriend1: () => void;
   onClaimOneTimeFriend5: () => void;
   onClaimOneTimeFriend10: () => void;
+  onClaimReferral1: () => void;
+  onClaimReferral3: () => void;
+  onClaimReferral5: () => void;
+  onClaimReferral10: () => void;
   formatTime: (seconds: number) => string;
 }) {
   const [taskSection, setTaskSection] = useState<"daily" | "oneTime">("daily");
@@ -6667,6 +7091,12 @@ function TasksScreen({
           friend1: "Add 1 friend",
           friend5: "Add 5 friends",
           friend10: "Add 10 friends",
+          referral1: "Invite 1 player",
+          referral3: "Invite 3 players",
+          referral5: "Invite 5 players",
+          referral10: "Invite 10 players",
+          referralMilestone:
+           "Only confirmed referrals who reached 100 taps count.",
           love: "Pet your kitty during the current daily cycle.",
           milestone: "Permanent achievement. Claim the reward once after completing it.",
           friendMilestone: "Add accepted friends in TrustyPaws. Only accepted friendships count.",
@@ -6684,6 +7114,12 @@ function TasksScreen({
           friend1: "Додай 1 друга",
           friend5: "Додай 5 друзів",
           friend10: "Додай 10 друзів",
+          referral1: "Запроси 1 гравця",
+          referral3: "Запроси 3 гравців",
+          referral5: "Запроси 5 гравців",
+          referral10: "Запроси 10 гравців",
+          referralMilestone:
+           "Враховуються лише підтверджені реферали, які зробили 100 натискань.",
           love: "Гладь котика протягом поточного щоденного циклу.",
           milestone: "Постійне досягнення. Після виконання нагороду можна забрати один раз.",
           friendMilestone: "Додавай прийнятих друзів у TrustyPaws. Враховуються лише прийняті дружби.",
@@ -6700,6 +7136,12 @@ function TasksScreen({
           friend1: "Добавь 1 друга",
           friend5: "Добавь 5 друзей",
           friend10: "Добавь 10 друзей",
+          referral1: "Пригласи 1 игрока",
+          referral3: "Пригласи 3 игроков",
+          referral5: "Пригласи 5 игроков",
+          referral10: "Пригласи 10 игроков",
+          referralMilestone:
+           "Учитываются только подтверждённые рефералы, которые сделали 100 нажатий.",
           love: "Гладь котика в течение текущего ежедневного цикла.",
           milestone: "Постоянное достижение. После выполнения награду можно забрать один раз.",
           friendMilestone: "Добавляй принятых друзей в TrustyPaws. Учитываются только принятые дружбы.",
@@ -6716,7 +7158,11 @@ function TasksScreen({
     Number(oneTimePet10000Claimed) +
     Number(oneTimeFriend1Claimed) +
     Number(oneTimeFriend5Claimed) +
-    Number(oneTimeFriend10Claimed);
+    Number(oneTimeFriend10Claimed) +
+    Number(referral1Claimed) +
+    Number(referral3Claimed) +
+    Number(referral5Claimed) +
+    Number(referral10Claimed);
 
   const achievementCard = (
     icon: string,
@@ -6819,7 +7265,7 @@ function TasksScreen({
       ) : (
         <>
           <div className="list-title task-list-title">
-            <span>{text.oneTime}</span><b>{oneTimeClaimed}/6</b>
+            <span>{text.oneTime}</span><b>{oneTimeClaimed}/10</b>
           </div>
 
           {achievementCard("🏆", text.pet1000, text.milestone, totalPetCount, ONE_TIME_PET_1000_GOAL, ONE_TIME_PET_1000_REWARD, oneTimePet1000Claimed, onClaimOneTimePet1000)}
@@ -6828,6 +7274,10 @@ function TasksScreen({
           {achievementCard("👥", text.friend1, text.friendMilestone, friendCount, ONE_TIME_FRIEND_1_GOAL, ONE_TIME_FRIEND_1_REWARD, oneTimeFriend1Claimed, onClaimOneTimeFriend1)}
           {achievementCard("👥", text.friend5, text.friendMilestone, friendCount, ONE_TIME_FRIEND_5_GOAL, ONE_TIME_FRIEND_5_REWARD, oneTimeFriend5Claimed, onClaimOneTimeFriend5)}
           {achievementCard("👥", text.friend10, text.friendMilestone, friendCount, ONE_TIME_FRIEND_10_GOAL, ONE_TIME_FRIEND_10_REWARD, oneTimeFriend10Claimed, onClaimOneTimeFriend10)}
+          {achievementCard("🎁",text.referral1,text.referralMilestone,referralCount,REFERRAL_1_GOAL,REFERRAL_1_REWARD,referral1Claimed,onClaimReferral1)}
+          {achievementCard("🎁",text.referral3,text.referralMilestone,referralCount,REFERRAL_3_GOAL,REFERRAL_3_REWARD,referral3Claimed,onClaimReferral3)}
+          {achievementCard("🎁",text.referral5,text.referralMilestone,referralCount,REFERRAL_5_GOAL,REFERRAL_5_REWARD,referral5Claimed,onClaimReferral5)}
+          {achievementCard("🎁",text.referral10,text.referralMilestone,referralCount,REFERRAL_10_GOAL,REFERRAL_10_REWARD,referral10Claimed,onClaimReferral10)}  
         </>
       )}
     </div>
@@ -7045,6 +7495,9 @@ function FriendsScreen({
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [referralCopied, setReferralCopied] = useState(false);
+  const [referralCount, setReferralCount] = useState(0);
+  const [referralLoading, setReferralLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
 
   const [leaderboard, setLeaderboard] = useState<FriendProfile[]>([]);
@@ -7059,6 +7512,14 @@ function FriendsScreen({
       .slice(0, 8)
       .toUpperCase()}`;
   }, [userId]);
+
+  const referralLink = useMemo(() => {
+  if (!userId) {
+    return "";
+  }
+
+  return `https://t.me/TrustyPawsGameBot?startapp=ref_${playerCode}`;
+  }, [userId, playerCode]);
 
   const loadFriendsData = async () => {
     if (!userId) {
@@ -7192,6 +7653,61 @@ function FriendsScreen({
     void loadLeaderboard();
   }, [supabaseReady, userId, socialSection]);
 
+  useEffect(() => {
+  if (!supabaseReady || !userId) {
+    setReferralCount(0);
+    return;
+  }
+
+  let cancelled = false;
+
+  const loadReferralCount = async () => {
+    setReferralLoading(true);
+
+  const { count, error } =
+  await supabase
+    .from("referrals")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("referrer_id", userId)
+    .eq("status", "confirmed");
+
+    if (error) {
+      console.error(
+        "TrustyPaws referral count error:",
+        error
+      );
+
+      if (!cancelled) {
+        setReferralLoading(false);
+      }
+
+      return;
+    }
+
+    if (!cancelled) {
+      setReferralCount(count ?? 0);
+      setReferralLoading(false);
+    }
+  };
+
+  void loadReferralCount();
+
+  const timer = window.setInterval(() => {
+    void loadReferralCount();
+  }, 15000);
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(timer);
+  };
+}, [
+  supabaseReady,
+  userId,
+]);
+
   const copyPlayerCode = async () => {
     try {
       await navigator.clipboard.writeText(playerCode);
@@ -7201,6 +7717,77 @@ function FriendsScreen({
       setSearchMessage(playerCode);
     }
   };
+
+  const copyReferralLink = async () => {
+  if (!referralLink) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(
+      referralLink
+    );
+
+    setReferralCopied(true);
+
+    window.setTimeout(() => {
+      setReferralCopied(false);
+    }, 1500);
+  } catch {
+    setSearchMessage(
+      referralLink
+    );
+  }
+};
+
+const shareReferralLink = () => {
+  if (!referralLink) {
+    return;
+  }
+
+  const inviteText =
+    language === "en"
+      ? "🐾 Join me in TrustyPaws! Take care of your cat and build the coziest home."
+      : language === "ua"
+      ? "🐾 Приєднуйся до мене в TrustyPaws! Піклуйся про свого котика та створи для нього найзатишніший дім."
+      : "🐾 Присоединяйся ко мне в TrustyPaws! Заботься о своём котике и построй для него самый уютный дом.";
+
+  const shareUrl =
+    `https://t.me/share/url?url=${encodeURIComponent(
+      referralLink
+    )}&text=${encodeURIComponent(
+      inviteText
+    )}`;
+
+  const telegram =
+    (
+      window as unknown as {
+        Telegram?: {
+          WebApp?: {
+            openTelegramLink?: (
+              url: string
+            ) => void;
+          };
+        };
+      }
+    ).Telegram?.WebApp;
+
+  if (
+    typeof telegram?.openTelegramLink ===
+    "function"
+  ) {
+    telegram.openTelegramLink(
+      shareUrl
+    );
+
+    return;
+  }
+
+  window.open(
+    shareUrl,
+    "_blank"
+  );
+};
 
   const searchPlayer = async () => {
     if (!userId || searching) return;
@@ -7500,35 +8087,181 @@ function FriendsScreen({
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "8px",
-          marginBottom: "14px",
-        }}
-      >
-        <button
-          type="button"
-          className={socialSection === "friends" ? "primary-button" : "buy-button"}
-          onClick={() => setSocialSection("friends")}
-          style={{ minHeight: "44px" }}
-        >
-          👥 {ft.friendsTab}
-        </button>
+      <div className="social-tabs">
+  <button
+    type="button"
+    className={`social-tab ${
+      socialSection === "friends"
+        ? "social-tab-active"
+        : ""
+    }`}
+    onClick={() =>
+      setSocialSection("friends")
+    }
+  >
+    <span className="social-tab-icon">👥</span>
+    <span>{ft.friendsTab}</span>
+  </button>
 
-        <button
-          type="button"
-          className={socialSection === "leaderboard" ? "primary-button" : "buy-button"}
-          onClick={() => setSocialSection("leaderboard")}
-          style={{ minHeight: "44px" }}
-        >
-          🏆 {ft.leaderboardTab}
-        </button>
-      </div>
+  <button
+    type="button"
+    className={`social-tab ${
+      socialSection === "leaderboard"
+        ? "social-tab-active"
+        : ""
+    }`}
+    onClick={() =>
+      setSocialSection("leaderboard")
+    }
+  >
+    <span className="social-tab-icon">🏆</span>
+    <span>{ft.leaderboardTab}</span>
+  </button>
+</div>
 
       {socialSection === "friends" ? (
         <>
+
+        <section
+  className="friend-search-card"
+  style={{
+    marginBottom: "14px",
+  }}
+>
+  <div
+    className="friend-section-heading"
+    style={{
+      marginBottom: "10px",
+    }}
+  >
+    <span>🎁</span>
+
+    <strong>
+      {language === "en"
+        ? "INVITE A FRIEND"
+        : language === "ua"
+        ? "ЗАПРОСИТИ ДРУГА"
+        : "ПРИГЛАСИТЬ ДРУГА"}
+    </strong>
+  </div>
+
+  <p
+    style={{
+      margin: "0 0 12px",
+      opacity: 0.75,
+      fontSize: "13px",
+      lineHeight: 1.45,
+    }}
+  >
+    {language === "en"
+      ? "Invite new players to TrustyPaws and earn special rewards."
+      : language === "ua"
+      ? "Запрошуй нових гравців у TrustyPaws та отримуй спеціальні нагороди."
+      : "Приглашай новых игроков в TrustyPaws и получай специальные награды."}
+  </p>
+
+  <div
+    style={{
+      padding: "11px 12px",
+      borderRadius: "12px",
+      background:
+        "rgba(255,255,255,0.06)",
+      marginBottom: "10px",
+      overflowWrap: "anywhere",
+      fontSize: "12px",
+      opacity: 0.9,
+    }}
+  >
+    {referralLink ||
+      "TrustyPaws"}
+  </div>
+
+  <div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+    marginBottom: "12px",
+  }}
+>
+  <button
+    type="button"
+    className="referral-action referral-invite"
+    onClick={shareReferralLink}
+    disabled={!userId}
+  >
+    📨{" "}
+    {language === "en"
+      ? "Invite"
+      : language === "ua"
+      ? "Запросити"
+      : "Пригласить"}
+  </button>
+
+  <button
+    type="button"
+    className={`referral-action referral-copy ${
+      referralCopied
+        ? "referral-copy-done"
+        : ""
+    }`}
+    onClick={() =>
+      void copyReferralLink()
+    }
+    disabled={!userId}
+  >
+    {referralCopied ? "✓" : "⧉"}{" "}
+    {referralCopied
+      ? language === "en"
+        ? "Copied"
+        : language === "ua"
+        ? "Скопійовано"
+        : "Скопировано"
+      : language === "en"
+      ? "Copy link"
+      : language === "ua"
+      ? "Копіювати"
+      : "Копировать"}
+  </button>
+</div>
+
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      paddingTop: "10px",
+      borderTop:
+        "1px solid rgba(255,255,255,0.08)",
+    }}
+  >
+    <span
+      style={{
+        fontSize: "13px",
+        opacity: 0.7,
+      }}
+    >
+      👥{" "}
+      {language === "en"
+        ? "Invited players"
+        : language === "ua"
+        ? "Запрошено гравців"
+        : "Приглашено игроков"}
+    </span>
+
+    <strong
+      style={{
+        fontSize: "18px",
+      }}
+    >
+      {referralLoading
+        ? "..."
+        : referralCount}
+    </strong>
+  </div>
+</section>
+
           <section className="player-id-card">
             <div className="player-id-icon">🐾</div>
 
