@@ -2001,6 +2001,16 @@ function App() {
         0
       )
     );
+  
+  const [
+    totalComfortLoaded,
+     setTotalComfortLoaded,
+      ] = useState(false);
+
+  const [
+      totalComfortEarned,
+       setTotalComfortEarned,
+        ] = useState(0);
 
   const adsgramControllerRef =
     useRef<AdsgramController | null>(null);
@@ -2910,6 +2920,67 @@ const [
     };
   }, [supabaseReady, userId]);
 
+/* ===================================================
+   TOTAL COMFORT LOAD
+=================================================== */
+
+useEffect(() => {
+  if (!supabaseReady || !userId) {
+    setTotalComfortLoaded(false);
+    return;
+  }
+
+  let cancelled = false;
+
+  const loadTotalComfort = async () => {
+    setTotalComfortLoaded(false);
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "total_comfort_earned,comfort"
+      )
+      .eq("id", userId)
+      .single();
+
+    if (cancelled) {
+      return;
+    }
+
+    if (error) {
+      console.error(
+        "TrustyPaws total comfort load error:",
+        error
+      );
+      return;
+    }
+
+    const loadedTotal =
+      Number(
+        data?.total_comfort_earned ??
+        data?.comfort ??
+        0
+      );
+
+    setTotalComfortEarned(
+      Number.isFinite(loadedTotal)
+        ? loadedTotal
+        : 0
+    );
+
+    setTotalComfortLoaded(true);
+  };
+
+  void loadTotalComfort();
+
+  return () => {
+    cancelled = true;
+  };
+}, [
+  supabaseReady,
+  userId,
+]);
+
   /* ===================================================
      SUPABASE PROFILE SYNC
 
@@ -2918,9 +2989,7 @@ const [
   =================================================== */
 
   useEffect(() => {
-    if (!supabaseReady || !userId || !petsLoaded) {
-      return;
-    }
+      if (!supabaseReady ||!userId ||!petsLoaded ||!totalComfortLoaded){return;}
 
     const timer = window.setTimeout(async () => {
       const username = `TP-${userId
@@ -2939,7 +3008,7 @@ const [
           .join(" ")
           .trim() || null;
 
-      const level = 1 + purchased.length;
+      const level = Math.min(99,Math.floor(Math.sqrt(totalComfortEarned / 5000)) + 1);
 
       const { error } = await supabase
         .from("profiles")
@@ -2951,6 +3020,7 @@ const [
             telegram_name: telegramName,
             pet_name: petName,
             comfort,
+            total_comfort_earned: totalComfortEarned,
             energy: Math.round(energy),
             taps: petCount,
             level,
@@ -2988,6 +3058,8 @@ const [
     userId,
     petName,
     comfort,
+    totalComfortEarned,
+    totalComfortLoaded,
     energy,
     petCount,
     purchased,
@@ -3823,6 +3895,11 @@ useEffect(() => {
     setComfort(
       (value) =>
         value + tapReward
+    );
+
+    setTotalComfortEarned(
+      (value) =>
+       value + tapReward
     );
 
     setPetCount(
@@ -4935,6 +5012,9 @@ const formatTime = (
               comfort={
                 comfort
               }
+              totalComfortEarned={
+                totalComfortEarned
+              }
               energy={
                 energy
               }
@@ -5520,6 +5600,7 @@ function HomeScreen({
   t,
   petName,
   comfort,
+  totalComfortEarned,
   energy,
   maxEnergy,
   petCount,
@@ -5547,6 +5628,7 @@ function HomeScreen({
   t: Translation;
   petName: string;
   comfort: number;
+  totalComfortEarned: number;
   energy: number;
   maxEnergy: number;
   petCount: number;
@@ -5729,9 +5811,13 @@ function HomeScreen({
             </span>
 
             <strong>
-              {1 +
-                purchased.length}
-            </strong>
+  {Math.min(
+    99,
+    Math.floor(
+      Math.sqrt(totalComfortEarned / 5000)
+    ) + 1
+  )}
+</strong>
 
           </div>
 
