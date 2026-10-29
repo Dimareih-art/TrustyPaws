@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
+import "./accessories.css";
 import { supabase } from "./lib/supabase";
 
 type Tab =
@@ -35,6 +36,25 @@ type Background = {
   image: string;
   cost: number;
 };
+
+type Accessory = {
+  id: string;
+  name: string;
+  emoji: string;
+  cost: number;
+  image?: string;
+  premium?: boolean;
+};
+
+const ACCESSORIES: Accessory[] = [
+  { id: "bow", name: "Бантик", emoji: "🎀", cost: 5000, image: "bant.png" },
+  { id: "glasses", name: "Очки", emoji: "🕶️", cost: 15000 },
+  { id: "crown", name: "Корона", emoji: "👑", cost: 50000 },
+  { id: "flower", name: "Цветок", emoji: "🌸", cost: 25000 },
+  { id: "halo", name: "Золотой нимб", emoji: "😇", cost: 0, image: "nimb.png", premium: true },
+  { id: "dragon", name: "Драконьи рога", emoji: "🐉", cost: 0, premium: true },
+  { id: "diamond", name: "Алмазная корона", emoji: "💎", cost: 0, premium: true },
+];
 
 type PetRarity = "starter" | "common" | "rare";
 
@@ -2001,6 +2021,28 @@ function App() {
         0
       )
     );
+
+  const [purchasedAccessories, setPurchasedAccessories] = useState<string[]>(() =>
+    getStoredArray("trusty_purchased_accessories")
+  );
+  const [equippedAccessory, setEquippedAccessory] = useState<string>(() =>
+    getStoredString("trusty_equipped_accessory", "")
+  );
+
+  useEffect(() => {
+    localStorage.setItem("trusty_purchased_accessories", JSON.stringify(purchasedAccessories));
+  }, [purchasedAccessories]);
+
+  useEffect(() => {
+    localStorage.setItem("trusty_equipped_accessory", equippedAccessory);
+  }, [equippedAccessory]);
+
+  const buyAccessory = (accessory: Accessory) => {
+    if (accessory.premium || purchasedAccessories.includes(accessory.id) || comfort < accessory.cost) return;
+    setComfort((value) => value - accessory.cost);
+    setPurchasedAccessories((value) => [...value, accessory.id]);
+    setEquippedAccessory(accessory.id);
+  };
   
   const [
     totalComfortLoaded,
@@ -5039,6 +5081,7 @@ const formatTime = (
               selectedPetImage={
                 selectedPetData.image
               }
+              equippedAccessory={equippedAccessory}
               tapAnimation={
                 tapAnimation
               }
@@ -5199,6 +5242,10 @@ const formatTime = (
               language={language}
               userId={userId}
               comfort={comfort}
+              purchasedAccessories={purchasedAccessories}
+              equippedAccessory={equippedAccessory}
+              onBuyAccessory={buyAccessory}
+              onEquipAccessory={setEquippedAccessory}
               purchasedPets={purchasedPets}
               selectedPet={selectedPet}
               onBuyComfortPet={buyComfortPet}
@@ -5609,6 +5656,7 @@ function HomeScreen({
   purchased,
   selectedBackground,
   selectedPetImage,
+  equippedAccessory,
   tapAnimation,
   rewardValue,
   showReward,
@@ -5637,6 +5685,7 @@ function HomeScreen({
   purchased: string[];
   selectedBackground: string;
   selectedPetImage: string;
+  equippedAccessory: string;
   tapAnimation: number;
   rewardValue: number;
   showReward: boolean;
@@ -5997,6 +6046,28 @@ function HomeScreen({
               className="cat-image"
               draggable="false"
             />
+            {equippedAccessory && (() => {
+              const accessory = ACCESSORIES.find((item) => item.id === equippedAccessory);
+              if (!accessory) return null;
+
+              return (
+                <span
+                  className={`cat-accessory cat-accessory-${equippedAccessory}`}
+                  aria-hidden="true"
+                >
+                  {accessory.image ? (
+                    <img
+                      className="cat-accessory-image"
+                      src={assetUrl(accessory.image)}
+                      alt=""
+                      draggable={false}
+                    />
+                  ) : (
+                    accessory.emoji
+                  )}
+                </span>
+              );
+            })()}
 
           </button>
 
@@ -8733,6 +8804,10 @@ function ShopScreen({
   language,
   userId,
   comfort,
+  purchasedAccessories,
+  equippedAccessory,
+  onBuyAccessory,
+  onEquipAccessory,
   purchasedPets,
   selectedPet,
   onBuyComfortPet,
@@ -8746,6 +8821,10 @@ function ShopScreen({
   language: Language;
   userId: string | null;
   comfort: number;
+  purchasedAccessories: string[];
+  equippedAccessory: string;
+  onBuyAccessory: (accessory: Accessory) => void;
+  onEquipAccessory: (id: string) => void;
   purchasedPets: string[];
   selectedPet: string;
   onBuyComfortPet: (pet: Pet) => void;
@@ -9428,22 +9507,42 @@ function ShopScreen({
       </div>
 
       {shopSection === "accessories" ? (
-        <section
-          style={{
-            padding: "28px 20px",
-            borderRadius: "22px",
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.045)",
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: "42px", marginBottom: "12px" }}>🎀</div>
-          <h3 style={{ margin: "0 0 8px", fontSize: "20px" }}>
-            {shopText.comingTitle}
-          </h3>
-          <p style={{ margin: 0, opacity: 0.68, lineHeight: 1.55 }}>
-            {shopText.accessoriesDescription}
-          </p>
+        <section className="accessory-shop-grid">
+          {ACCESSORIES.map((accessory) => {
+            const owned = purchasedAccessories.includes(accessory.id);
+            const equipped = equippedAccessory === accessory.id;
+            return (
+              <article className="accessory-shop-card" key={accessory.id}>
+                <div className="accessory-shop-emoji">
+                  {accessory.image ? (
+                    <img
+                      className="accessory-shop-image"
+                      src={assetUrl(accessory.image)}
+                      alt=""
+                      draggable={false}
+                    />
+                  ) : (
+                    accessory.emoji
+                  )}
+                </div>
+                <strong>{language === "en" ? ({ bow: "Bow", glasses: "Sunglasses", crown: "Crown", flower: "Flower", halo: "Golden halo", dragon: "Dragon horns", diamond: "Diamond crown" } as Record<string, string>)[accessory.id] : language === "ua" ? ({ bow: "Бантик", glasses: "Окуляри", crown: "Корона", flower: "Квітка", halo: "Золотий німб", dragon: "Драконячі роги", diamond: "Алмазна корона" } as Record<string, string>)[accessory.id] : accessory.name}</strong>
+                <div className="accessory-shop-price">{accessory.premium ? "⭐ Telegram Stars" : `🐾 ${formatNumber(accessory.cost)}`}</div>
+                {accessory.premium ? (
+                  <button type="button" disabled className="accessory-shop-button">
+                    {language === "en" ? "Coming soon" : language === "ua" ? "Незабаром" : "Скоро"}
+                  </button>
+                ) : owned ? (
+                  <button type="button" className="accessory-shop-button" onClick={() => onEquipAccessory(equipped ? "" : accessory.id)}>
+                    {equipped ? (language === "en" ? "Unequip" : language === "ua" ? "Зняти" : "Снять") : (language === "en" ? "Equip" : language === "ua" ? "Одягнути" : "Надеть")}
+                  </button>
+                ) : (
+                  <button type="button" className="accessory-shop-button" disabled={comfort < accessory.cost} onClick={() => onBuyAccessory(accessory)}>
+                    {language === "en" ? "Buy" : language === "ua" ? "Купити" : "Купить"}
+                  </button>
+                )}
+              </article>
+            );
+          })}
         </section>
       ) : shopSection === "pets" ? (
         <section>

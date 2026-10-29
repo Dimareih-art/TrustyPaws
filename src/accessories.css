@@ -1,0 +1,154 @@
+/* =========================================================
+   TRUSTYPAWS — ACCESSORIES
+   Дополнительные стили магазина и аксессуаров питомца.
+   Положение .cat-button задаётся в index.css — здесь его не переопределяем.
+========================================================= */
+
+.accessory-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.accessory-shop-card {
+  min-width: 0;
+  padding: 16px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  text-align: center;
+}
+
+.accessory-shop-emoji {
+  width: 64px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  line-height: 1.2;
+}
+
+/* PNG-превью аксессуаров в магазине */
+.accessory-shop-image {
+  display: block;
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.accessory-shop-price {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.accessory-shop-button {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-radius: 11px;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.accessory-shop-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Аксессуар расположен поверх кота.
+   .cat-button задаёт систему координат в index.css. */
+.cat-accessory {
+  position: absolute;
+  z-index: 8;
+  top: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(26px, 8vw, 44px);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* PNG-изображения бантика, нимба и других графических аксессуаров */
+.cat-accessory-image {
+  display: block;
+  width: clamp(38px, 10vw, 62px);
+  height: clamp(38px, 10vw, 62px);
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Очки располагаем ниже, примерно на уровне глаз. */
+.cat-accessory-glasses {
+  top: 29%;
+}
+
+.cat-accessory-crown,
+.cat-accessory-halo,
+.cat-accessory-dragon,
+.cat-accessory-diamond,
+.cat-accessory-bow,
+.cat-accessory-flower {
+  top: 3%;
+}
+
+@media (max-width: 360px) {
+  .accessory-shop-grid {
+    gap: 8px;
+  }
+
+  .accessory-shop-card {
+    padding: 12px 8px;
+  }
+
+  .cat-accessory-image {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/* PNG-изображения аксессуаров в магазине */
+.accessory-shop-image {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+/* PNG-аксессуары непосредственно на котике */
+.cat-accessory-image {
+  display: block;
+  width: clamp(36px, 10vw, 54px);
+  height: auto;
+  max-width: none;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Нимб — над головой */
+.cat-accessory-halo .cat-accessory-image {
+  width: clamp(48px, 13vw, 68px);
+  transform: translateY(-12px);
+}
+
+/* Бантик */
+.cat-accessory-bow .cat-accessory-image {
+  width: clamp(30px, 8vw, 44px);
+}
